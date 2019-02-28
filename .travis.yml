@@ -6,10 +6,25 @@ matrix:
       python: 3.6
       env:
         - PYTHON_VERSION=3.6
+        - CTAPIPE_VERSION=master
+
+    - os: linux
+      python: 3.6
+      env:
+        - PYTHON_VERSION=3.6
+        - CTAPIPE_VERSION=ef14205fa9
+
     - os: linux
       python: 3.7
       env:
         - PYTHON_VERSION=3.7
+        - CTAPIPE_VERSION=master
+
+    - os: linux
+      python: 3.7
+      env:
+        - PYTHON_VERSION=3.7
+        - CTAPIPE_VERSION=ef14205fa9
 
 
 before_install:
@@ -18,19 +33,19 @@ before_install:
 
     - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
     - bash miniconda.sh -b -p $HOME/miniconda
-    - export PATH="$HOME/miniconda/bin:$PATH"
+    - . $HOME/miniconda/etc/profile.d/conda.sh
     - hash -r
     - conda config --set always_yes yes --set changeps1 no
     - conda update -q conda  # get latest conda version
-    # Useful for debugging any issues with conda
-    - conda info -a
-    - git fetch --tags
+    - conda info -a # Useful for debugging any issues with conda
 
 install:
     - conda create --name travis python=$PYTHON_VERSION
     - travis_wait 20 conda env update -n travis --file py${PYTHON_VERSION}_env.yaml
-    - . $HOME/miniconda/etc/profile.d/conda.sh
     - conda activate travis
+    
+    # we install ctapipe using pip to be able to select any commit, e.g. the current master
+    - pip install https://github.com/cta-observatory/ctapipe/archive/$CTAPIPE_VERSION.tar.gz
     - pip install -e .
 
 script:
