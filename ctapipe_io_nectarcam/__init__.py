@@ -8,11 +8,17 @@ Needs protozfits v1.4.2 from github.com/cta-sst-1m/protozfitsreader
 import numpy as np
 import glob
 from astropy import units as u
-from ctapipe.instrument import TelescopeDescription, SubarrayDescription, \
-    CameraGeometry, OpticsDescription
-from .eventsource import EventSource
-from .lsteventsource import MultiFiles
+from ctapipe.instrument import (
+    TelescopeDescription,
+    SubarrayDescription,
+    CameraGeometry,
+    OpticsDescription,
+)
+from ctapipe.io import EventSource
+from ctapipe.core import Provenance
+from astropy.io import fits
 from .containers import NectarCAMDataContainer
+
 
 __all__ = ['NectarCAMEventSource']
 
@@ -23,8 +29,6 @@ class NectarCAMEventSource(EventSource):
     """
 
     def __init__(self, config=None, tool=None, **kwargs):
-
-
         """
         Constructor
         Parameters
@@ -46,7 +50,6 @@ class NectarCAMEventSource(EventSource):
         # To overcome this we substitute the input_url with first file matching
         # the specified file mask (copied from  MAGICEventSourceROOT).
 
-
         if 'input_url' in kwargs.keys():
             self.file_list = glob.glob(kwargs['input_url'])
             self.file_list.sort()
@@ -61,7 +64,6 @@ class NectarCAMEventSource(EventSource):
 
         self.log.info("Read {} input files".format(self.multi_file.num_inputs()))
 
-
     def _generator(self):
 
         # container for NectarCAM data
@@ -70,7 +72,6 @@ class NectarCAMEventSource(EventSource):
 
         # fill data from the CameraConfig table
         self.fill_nectarcam_service_container_from_zfile()
-
 
         # Instrument information
         for tel_id in self.data.nectarcam.tels_with_data:
@@ -94,14 +95,11 @@ class NectarCAMEventSource(EventSource):
             # LSTs telescope position
             tel_pos = {tel_id: [0., 0., 0] * u.m}
 
-
         self.subarray = SubarrayDescription("MST prototype subarray")
         self.subarray.tels = tels
         self.subarray.positions = tel_pos
 
         self.data.inst.subarray = self.subarray
-
-
 
         # loop on events
         for count, event in enumerate(self.multi_file):
@@ -115,14 +113,8 @@ class NectarCAMEventSource(EventSource):
             self.fill_r0_container_from_zfile(event)
             yield self.data
 
-
     @staticmethod
     def is_compatible(file_path):
-        from .sst1meventsource import is_fits_in_header
-        if not is_fits_in_header(file_path):
-            return False
-
-        from astropy.io import fits
         try:
             # The file contains two tables:
             #  1: CameraConfig
@@ -172,12 +164,7 @@ class NectarCAMEventSource(EventSource):
         svc_container.algorithms = self.camera_config.nectarcam.algorithms
         # svc_container.pre_proc_algorithms = camera_config.nectarcam.pre_proc_algorithms
 
-
-
-
     def fill_nectarcam_event_container_from_zfile(self, event):
-
-
         event_container = self.data.nectarcam.tel[self.camera_config.telescope_id].evt
 
         event_container.configuration_id = event.configuration_id
@@ -192,10 +179,7 @@ class NectarCAMEventSource(EventSource):
         event_container.swat_data = event.nectarcam.swat_data
         event_container.counters = event.nectarcam.counters
 
-
     def fill_r0_camera_container_from_zfile(self, container, event):
-
-
         container.num_samples = self.camera_config.num_samples
         container.trigger_time = event.trigger_time_s
         container.trigger_type = event.trigger_type
@@ -228,7 +212,6 @@ class NectarCAMEventSource(EventSource):
         container.waveform[:, self.camera_config.expected_pixels_id, :] \
             = reshaped_waveform
 
-
     def fill_r0_container_from_zfile(self, event):
         container = self.data.r0
         container.obs_id = -1
@@ -242,3 +225,84 @@ class NectarCAMEventSource(EventSource):
             event
         )
 
+
+class MultiFiles:
+
+    """
+    This class open all the files in file_list and read the events following
+    the event_id order
+    """
+
+    def __init__(self, file_list):
+
+        self._file = {}
+        self._events = {}
+        self._events_table = {}
+        self._camera_config = {}
+        self.camera_config = None
+
+
+        paths = []
+        for file_name in file_list:
+            paths.append(file_name)
+            Provenance().add_input_file(file_name, role='r0.sub.evt')
+
+        # open the files and get the first fits Tables
+        from protozfits import File
+
+        for path in paths:
+
+            try:
+                self._file[path] = File(path)
+                self._events_table[path] = File(path).Events
+                self._events[path] = next(self._file[path].Events)
+
+                # verify where the CameraConfig is present
+                if 'CameraConfig' in self._file[path].__dict__.keys():
+                    self._camera_config[path] = next(self._file[path].CameraConfig)
+
+                # for the moment it takes the first CameraConfig it finds (to be changed)
+                    if(self.camera_config is None):
+                        self.camera_config = self._camera_config[path]
+
+
+            except StopIteration:
+                pass
+
+        # verify that somewhere the CameraConfing is present
+        assert (self.camera_config)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return self.next_event()
+
+    def next_event(self):
+        # check for the minimal event id
+        if not self._events:
+            raise StopIteration
+
+        min_path = min(
+            self._events.items(),
+            key=lambda item: item[1].event_id,
+        )[0]
+
+        # return the minimal event id
+        next_event = self._events[min_path]
+        try:
+            self._events[min_path] = next(self._file[min_path].Events)
+        except StopIteration:
+            del self._events[min_path]
+
+        return next_event
+
+    def __len__(self):
+        total_length = sum(
+            len(table)
+            for table in self._events_table.values()
+        )
+        return total_length
+
+    def num_inputs(self):
+        return len(self._file)

@@ -1,17 +1,11 @@
-from pkg_resources import resource_filename
-import os
-
-import pytest
 from ctapipe.utils import get_dataset_path
-pytest.importorskip("protozfits", minversion="1.4.2")
 
 FIRST_EVENT_NUMBER_IN_FILE = 1
-
-# example_file_path="NectarCam.Run0890.10events.fits.fz"
 example_file_path = get_dataset_path("NectarCAM.Run0890.10events.fits.fz")
 
+
 def test_loop_over_events():
-    from ctapipe.io.nectarcameventsource import NectarCAMEventSource
+    from ctapipe_io_nectarcam import NectarCAMEventSource
 
     n_events = 10
     inputfile_reader = NectarCAMEventSource(
@@ -35,15 +29,18 @@ def test_loop_over_events():
 
 
 def test_is_compatible():
-    from ctapipe.io.nectarcameventsource import NectarCAMEventSource
+    from ctapipe_io_nectarcam import NectarCAMEventSource
 
     assert NectarCAMEventSource.is_compatible(example_file_path)
 
 
 def test_factory_for_nectarcam_file():
     from ctapipe.io import event_source
-    from ctapipe.io.nectarcameventsource import NectarCAMEventSource
 
     reader = event_source(example_file_path)
+
+    # explicit import after event_source, to test if this
+    # package is detected by ctapipe
+    from ctapipe_io_nectarcam import NectarCAMEventSource
     assert isinstance(reader, NectarCAMEventSource)
     assert reader.input_url == example_file_path
