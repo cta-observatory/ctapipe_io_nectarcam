@@ -7,6 +7,7 @@ Needs protozfits v1.4.2 from github.com/cta-sst-1m/protozfitsreader
 
 import numpy as np
 import glob
+import struct
 from astropy import units as u
 from ctapipe.instrument import (
     TelescopeDescription,
@@ -15,10 +16,11 @@ from ctapipe.instrument import (
     OpticsDescription,
 )
 from ctapipe.io import EventSource
+from ctapipe.io.containers import PixelStatusContainer
+from ctapipe.core.traits import Int
 from ctapipe.core import Provenance
 from astropy.io import fits
 from .containers import NectarCAMDataContainer
-
 
 __all__ = ['NectarCAMEventSource']
 
@@ -27,8 +29,17 @@ class NectarCAMEventSource(EventSource):
     """
     EventSource for NectarCam r0 data.
     """
+    n_gains = Int(
+        2,
+        help='Number of gains at r0/r1 level'
+    ).tag(config=True)
 
-    def __init__(self, config=None, tool=None, **kwargs):
+    baseline = Int(
+        250,
+        help='r0 waveform baseline '
+    ).tag(config=True)
+
+    def __init__(self, **kwargs):
         """
         Constructor
         Parameters
@@ -54,9 +65,9 @@ class NectarCAMEventSource(EventSource):
             self.file_list = glob.glob(kwargs['input_url'])
             self.file_list.sort()
             kwargs['input_url'] = self.file_list[0]
-            super().__init__(config=config, tool=tool, **kwargs)
+            super().__init__(**kwargs)
         else:
-            super().__init__(config=config, tool=tool, **kwargs)
+            super().__init__(**kwargs)
             self.file_list = [self.input_url]
 
         self.multi_file = MultiFiles(self.file_list)
@@ -69,6 +80,7 @@ class NectarCAMEventSource(EventSource):
         # container for NectarCAM data
         self.data = NectarCAMDataContainer()
         self.data.meta['input_url'] = self.input_url
+        self.data.meta['origin'] = 'NectarCAM'
 
         # fill data from the CameraConfig table
         self.fill_nectarcam_service_container_from_zfile()
@@ -85,7 +97,7 @@ class NectarCAMEventSource(EventSource):
             geometry_version = 2
             camera = CameraGeometry.from_name("NectarCam", geometry_version)
 
-            tel_descr = TelescopeDescription(optics, camera)
+            tel_descr = TelescopeDescription(name='MST', type='NectarCam', optics=optics, camera=camera)
 
             tel_descr.optics.tel_subtype = ''  # to correct bug in reading
 
@@ -101,6 +113,9 @@ class NectarCAMEventSource(EventSource):
 
         self.data.inst.subarray = self.subarray
 
+        # initialize general monitoring container
+        self.initialize_mon_container()
+
         # loop on events
         for count, event in enumerate(self.multi_file):
 
@@ -111,6 +126,13 @@ class NectarCAMEventSource(EventSource):
 
             # fill general R0 data
             self.fill_r0_container_from_zfile(event)
+
+            # copy r0 to r1
+            self.fill_r1_container()
+
+            # fill general monitoring data
+            self.fill_mon_container_from_zfile(event)
+
             yield self.data
 
     @staticmethod
@@ -174,45 +196,63 @@ class NectarCAMEventSource(EventSource):
         event_container.ped_id = event.ped_id
         event_container.module_status = event.nectarcam.module_status
         event_container.extdevices_presence = event.nectarcam.extdevices_presence
-        event_container.tib_data = event.nectarcam.tib_data
-        event_container.cdts_data = event.nectarcam.cdts_data
+        #event_container.tib_data = event.nectarcam.tib_data
+        #event_container.cdts_data = event.nectarcam.cdts_data
         event_container.swat_data = event.nectarcam.swat_data
         event_container.counters = event.nectarcam.counters
 
+        # unpack TIB data
+        rec_fmt = '=IHIBB'
+        unpacked_tib = struct.unpack(rec_fmt, event.nectarcam.tib_data)
+        event_container.tib_event_counter = unpacked_tib[0]
+        event_container.tib_pps_counter = unpacked_tib[1]
+        event_container.tib_tenMHz_counter = unpacked_tib[2]
+        event_container.tib_stereo_pattern = unpacked_tib[3]
+        event_container.tib_masked_trigger = unpacked_tib[4]
+        event_container.swat_data = event.lstcam.swat_data
+
+        # unpack CDTS data
+        rec_fmt = '=IIIQQBBB'
+        unpacked_cdts =  struct.unpack(rec_fmt, event.nectarcam.cdts_data)
+        event_container.ucts_event_counter = unpacked_cdts[0]
+        event_container.ucts_pps_counter = unpacked_cdts[1]
+        event_container.ucts_clock_counter = unpacked_cdts[2]
+        event_container.ucts_timestamp = unpacked_cdts[3]
+        event_container.ucts_camera_timestamp = unpacked_cdts[4]
+        event_container.ucts_trigger_type = unpacked_cdts[5]
+        event_container.ucts_white_rabbit_status = unpacked_cdts[6]
+
     def fill_r0_camera_container_from_zfile(self, container, event):
-        container.num_samples = self.camera_config.num_samples
+
         container.trigger_time = event.trigger_time_s
-        container.trigger_type = event.trigger_type
+        #container.trigger_type = event.trigger_type
+        container.trigger_type = self.data.nectarcam.tel[self.camera_config.telescope_id].evt.tib_masked_trigger
 
         # verify the number of gains
-        if event.waveform.shape[0] == (self.camera_config.num_pixels *
-                                       container.num_samples):
-            n_gains = 1
-        elif event.waveform.shape[0] == (self.camera_config.num_pixels *
-                                         container.num_samples * 2):
-            n_gains = 2
-        else:
-            raise ValueError("Waveform matrix dimension not supported: "
-                             "N_chan x N_pix x N_samples= '{}'"
-                             .format(event.waveform.shape[0]))
 
+        if event.waveform.shape[0] != self.camera_config.num_pixels * self.camera_config.num_samples * self.n_gains:
+            raise ValueError(f"Number of gains not correct, waveform shape is {event.waveform.shape[0]}"
+                             f" instead of "
+                             f"{self.camera_config.num_pixels * self.camera_config.num_samples * self.n_gains}")
 
         reshaped_waveform = np.array(
             event.waveform
-             ).reshape(n_gains,
+             ).reshape(self.n_gains,
                        self.camera_config.num_pixels,
-                       container.num_samples)
+                       self.camera_config.num_samples)
 
         # initialize the waveform container to zero
-        container.waveform = np.zeros([n_gains,
+        container.waveform = np.zeros([self.n_gains,
                                        self.n_camera_pixels,
-                                       container.num_samples])
+                                       self.camera_config.num_samples])
 
         # re-order the waveform following the expected_pixels_id values (rank = pixel id)
         container.waveform[:, self.camera_config.expected_pixels_id, :] \
             = reshaped_waveform
 
     def fill_r0_container_from_zfile(self, event):
+        """fill the event r0 container"""
+
         container = self.data.r0
         container.obs_id = -1
         container.event_id = event.event_id
@@ -224,6 +264,59 @@ class NectarCAMEventSource(EventSource):
             r0_camera_container,
             event
         )
+
+    def fill_r1_container(self):
+        """
+           fill the event r1 container
+           In the case of nectarCAM:
+           r1 waveform = r0 waveform - self.baseline
+
+        """
+        self.data.r1.tels_with_data = [self.camera_config.telescope_id, ]
+
+        r1_camera_container = self.data.r1.tel[self.camera_config.telescope_id]
+        r1_camera_container.waveform = self.data.r0.tel[self.camera_config.telescope_id].waveform - self.baseline
+        r1_camera_container.trigger_type = self.data.r0.tel[self.camera_config.telescope_id].trigger_type
+        r1_camera_container.trigger_time = self.data.r0.tel[self.camera_config.telescope_id].trigger_time
+
+    def initialize_mon_container(self):
+        """
+        Fill with MonitoringContainer.
+        For the moment, initialize only the PixelStatusContainer
+
+        """
+        container = self.data.mon
+        container.tels_with_data = [self.camera_config.telescope_id, ]
+        mon_camera_container = container.tel[self.camera_config.telescope_id]
+
+        # initialize the container
+        status_container = PixelStatusContainer()
+        status_container.hardware_failing_pixels = np.zeros((self.n_gains, self.n_camera_pixels), dtype=bool)
+        status_container.pedestal_failing_pixels = np.zeros((self.n_gains, self.n_camera_pixels), dtype=bool)
+        status_container.flatfield_failing_pixels = np.zeros((self.n_gains, self.n_camera_pixels), dtype=bool)
+
+        mon_camera_container.pixel_status = status_container
+
+    def fill_mon_container_from_zfile(self, event):
+        """
+        Fill with MonitoringContainer.
+        For the moment, initialize only the PixelStatusContainer
+
+        """
+
+        status_container = self.data.mon.tel[self.camera_config.telescope_id].pixel_status
+
+        # reorder the array
+        pixel_status = np.zeros(self.n_camera_pixels)
+        pixel_status[self.camera_config.expected_pixels_id] = event.pixel_status
+        status_container.hardware_failing_pixels[:] = pixel_status == 0
+        '''
+        for gain in(np.arange(self.n_gains)):
+             pixel_status[self.camera_config.expected_pixels_id] = event.pixel_status
+
+             # initialize the hardware mask
+             status_container.hardware_failing_pixels[gain] = pixel_status == 0
+        '''
 
 
 class MultiFiles:
