@@ -4,6 +4,7 @@ Container structures for data that should be read or written to disk
 
 from ctapipe.core import Container, Field, Map
 from ctapipe.io.containers import DataContainer
+from ctapipe.io.containers import MonitoringContainer
 
 __all__ = [
     'NectarCAMContainer',
@@ -48,8 +49,23 @@ class NectarCAMEventContainer(Container):
     ped_id = Field(None, "tel_event_id of the event used for pedestal substraction")
     module_status = Field([], "status of the modules")
     extdevices_presence = Field(None, "presence of data for external devices")
-    tib_data = Field([], "TIB data array")
-    cdts_data = Field([], "CDTS data array")
+    #tib_data = Field([], "TIB data array")
+    #cdts_data = Field([], "CDTS data array")
+
+    tib_event_counter = Field(None, "TIB event counter")
+    tib_pps_counter = Field(None, "TIB pps counter")
+    tib_tenMHz_counter = Field(None, "TIB 10 MHz counter")
+    tib_stereo_pattern = Field(None, "TIB stereo pattern")
+    tib_masked_trigger = Field(None, "TIB trigger mask")
+
+    ucts_event_counter =  Field(None, "UCTS event counter")
+    ucts_pps_counter = Field(None, "UCTS pps counter")
+    ucts_clock_counter = Field(None, "UCTS clock counter")
+    ucts_timestamp = Field(None, "UCTS timestamp")
+    ucts_camera_timestamp = Field(None, "UCTS camera timestamp")
+    ucts_trigger_type = Field(None, "UCTS trigger type")
+    ucts_white_rabbit_status = Field(None, "UCTS whiteRabbit status")
+
     swat_data = Field([], "SWAT data array")
     counters = Field([], "counters")
 
@@ -80,3 +96,4 @@ class NectarCAMDataContainer(DataContainer):
     Data container including NectarCAM information
     """
     nectarcam = Field(NectarCAMContainer(), "NectarCAM specific Information")
+    mon = Field(MonitoringContainer(), "container for monitoring data (MON)")
