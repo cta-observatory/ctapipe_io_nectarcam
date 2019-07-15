@@ -97,7 +97,7 @@ class NectarCAMEventSource(EventSource):
             geometry_version = 2
             camera = CameraGeometry.from_name("NectarCam", geometry_version)
 
-            tel_descr = TelescopeDescription(name='MST', type='NectarCam', optics=optics, camera=camera)
+            tel_descr = TelescopeDescription(name='MST', tel_type='NectarCam', optics=optics, camera=camera)
 
             tel_descr.optics.tel_subtype = ''  # to correct bug in reading
 
