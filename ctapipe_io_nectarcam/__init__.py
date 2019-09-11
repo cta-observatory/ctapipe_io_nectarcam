@@ -222,6 +222,51 @@ class NectarCAMEventSource(EventSource):
         event_container.ucts_trigger_type = unpacked_cdts[5]
         event_container.ucts_white_rabbit_status = unpacked_cdts[6]
 
+        # Unpack FEB counters and trigger pattern
+        self.unpack_feb_data(event)
+
+    def unpack_feb_data(self, event):
+        '''Unpack FEB counters and trigger pattern'''
+        event_container = self.data.nectarcam.tel[self.camera_config.telescope_id].evt
+
+        # Deduce data format version
+        bytes_per_module = len(event.nectarcam.counters)//self.camera_config.nectarcam.num_modules
+        # Remain compatible with data before addition of trigger pattern
+        module_fmt = 'IHHIHBBBBBB' if bytes_per_module > 16 else 'IHHIHBB'
+        n_fields = len(module_fmt)
+        rec_fmt = '=' + module_fmt*self.camera_config.nectarcam.num_modules
+        # Unpack
+        unpacked_feb =  struct.unpack(rec_fmt, event.nectarcam.counters)
+        # Initialize field containers
+        n_camera_modules = self.n_camera_pixels//7
+        event_container.feb_abs_event_id = np.zeros(shape=(n_camera_modules,), dtype=np.uint32)
+        event_container.feb_event_id = np.zeros(shape=(n_camera_modules,), dtype=np.uint16)
+        event_container.feb_pps_cnt = np.zeros(shape=(n_camera_modules,), dtype=np.uint16)
+        event_container.feb_ts1 = np.zeros(shape=(n_camera_modules,), dtype=np.uint32)
+        if bytes_per_module > 16:
+            n_patterns = 4
+            event_container.trigger_pattern = np.zeros(shape=(n_patterns, self.n_camera_pixels), dtype=bool)
+
+        # Unpack absolute event ID
+        event_container.feb_abs_event_id[self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[0::n_fields]
+        # Unpack relative event ID
+        event_container.feb_event_id[self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[1::n_fields]
+        # Unpack PPS counter
+        event_container.feb_pps_cnt[self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[2::n_fields]
+        # Unpack TS1 counter
+        event_container.feb_ts1[self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[3::n_fields]
+        # Loop over modules
+        for module_idx, module_id in enumerate(self.camera_config.nectarcam.expected_modules_id):
+            offset = module_id*7
+            if bytes_per_module > 16:
+                field_id = 7
+                # Decode trigger pattern
+                for pattern_id in range(n_patterns):
+                    value = unpacked_feb[n_fields*module_idx+field_id+pattern_id]
+                    module_pattern = [int(digit) for digit in reversed(bin(value)[2:].zfill(7))]
+                    event_container.trigger_pattern[pattern_id, offset:offset+7] = module_pattern
+        
+
     def fill_r0_camera_container_from_zfile(self, container, event):
 
         container.trigger_time = event.trigger_time_s

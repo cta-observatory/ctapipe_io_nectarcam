@@ -69,6 +69,13 @@ class NectarCAMEventContainer(Container):
     swat_data = Field([], "SWAT data array")
     counters = Field([], "counters")
 
+    # FEB counters and trigger pattern
+    feb_abs_event_id = Field(None, "FEB absolute id of the event")
+    feb_event_id = Field(None, "FEB event count since last PPS")
+    feb_pps_cnt = Field(None, "FEB count of PPS")
+    feb_ts1 = Field(None, "FEB TS1")
+    # TODO: TS2
+    trigger_pattern =  Field(None, "FEB L0 trigger pattern")
 
 class NectarCAMCameraContainer(Container):
     """
