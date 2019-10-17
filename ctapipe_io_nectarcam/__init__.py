@@ -2,7 +2,7 @@
 """
 EventSource for LSTCam protobuf-fits.fz-files.
 
-Needs protozfits v1.4.2 from github.com/cta-sst-1m/protozfitsreader
+Needs protozfits v1.5.0 from github.com/cta-sst-1m/protozfitsreader
 """
 
 import numpy as np
