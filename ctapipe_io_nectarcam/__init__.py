@@ -39,6 +39,11 @@ class NectarCAMEventSource(EventSource):
         help='r0 waveform baseline '
     ).tag(config=True)
 
+    geometry_version = Int(
+        3,
+        help='Version of the camera geometry to be used '
+    ).tag(config=True)
+
     def __init__(self, **kwargs):
         """
         Constructor
@@ -94,8 +99,7 @@ class NectarCAMEventSource(EventSource):
             optics.tel_subtype = ''  # to correct bug in reading
 
             # camera info from NectarCam-[geometry_version].camgeom.fits.gz file
-            geometry_version = 2
-            camera = CameraGeometry.from_name("NectarCam", geometry_version)
+            camera = CameraGeometry.from_name("NectarCam", self.geometry_version)
 
             tel_descr = TelescopeDescription(name='MST', tel_type='NectarCam', optics=optics, camera=camera)
 
