@@ -216,15 +216,23 @@ class NectarCAMEventSource(EventSource):
         event_container.swat_data = event.lstcam.swat_data
 
         # unpack CDTS data
-        rec_fmt = '=IIIQQBBB'
+        is_old_cdts = len(event.nectarcam.cdts_data) < 36
+        rec_fmt = '=IIIQQBBB' if is_old_cdts else '=QIIIIIBBBBI'
         unpacked_cdts =  struct.unpack(rec_fmt, event.nectarcam.cdts_data)
-        event_container.ucts_event_counter = unpacked_cdts[0]
-        event_container.ucts_pps_counter = unpacked_cdts[1]
-        event_container.ucts_clock_counter = unpacked_cdts[2]
-        event_container.ucts_timestamp = unpacked_cdts[3]
-        event_container.ucts_camera_timestamp = unpacked_cdts[4]
-        event_container.ucts_trigger_type = unpacked_cdts[5]
-        event_container.ucts_white_rabbit_status = unpacked_cdts[6]
+        if is_old_cdts:
+            event_container.ucts_event_counter = unpacked_cdts[0]
+            event_container.ucts_pps_counter = unpacked_cdts[1]
+            event_container.ucts_clock_counter = unpacked_cdts[2]
+            event_container.ucts_timestamp = unpacked_cdts[3]
+            event_container.ucts_camera_timestamp = unpacked_cdts[4]
+            event_container.ucts_trigger_type = unpacked_cdts[5]
+            event_container.ucts_white_rabbit_status = unpacked_cdts[6]
+        else:
+            event_container.ucts_timestamp = unpacked_cdts[0]
+            event_container.ucts_event_counter = unpacked_cdts[2]
+            event_container.ucts_pps_counter = unpacked_cdts[4]
+            event_container.ucts_clock_counter = unpacked_cdts[5]
+            event_container.ucts_trigger_type = unpacked_cdts[6]
 
     def fill_r0_camera_container_from_zfile(self, container, event):
 
