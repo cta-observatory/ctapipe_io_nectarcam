@@ -30,6 +30,6 @@ dependencies:
   - pip:
       - pytest_runner
       - https://github.com/cta-observatory/ctapipe-extra/archive/v0.2.16.tar.gz
-      - https://github.com/cta-sst-1m/protozfitsreader/archive/v1.4.2.tar.gz
+      - https://github.com/cta-sst-1m/protozfitsreader/archive/v1.5.0.tar.gz
       # master at 22.02.2019
       - git+git://github.com/cta-observatory/ctapipe.git@ef14205fa9f7be7028839d50b335eb9be1b16092
