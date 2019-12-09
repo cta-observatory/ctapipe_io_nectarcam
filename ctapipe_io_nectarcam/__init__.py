@@ -80,6 +80,38 @@ class NectarCAMEventSource(EventSource):
 
         self.log.info("Read {} input files".format(self.multi_file.num_inputs()))
 
+    def subarray(self):
+        """
+	Obtain the subarray from the EventSource
+        Returns
+        -------
+        ctapipe.instrument.SubarrayDecription
+        """
+
+	tel_id = 1
+
+        # optics info from standard optics.fits.gz file
+        optics = OpticsDescription.from_name("MST")
+
+        # camera info from NectarCam-[geometry_version].camgeom.fits.gz file
+        geometry_version = 3
+        camera = CameraGeometry.from_name("NectarCam", geometry_version)
+
+        tel_descr = TelescopeDescription(
+            name='MST', tel_type='MST', optics=optics, camera=camera
+        )
+
+	tels = {tel_id: tel_descr}
+
+        # LSTs telescope position taken from MC from the moment
+        tel_pos = {tel_id: [0., 0., 9.] * u.m}
+
+        subarray = SubarrayDescription("MST1 subarray")
+        subarray.tels = tels
+        subarray.positions = tel_pos
+
+        return subarray
+
     def _generator(self):
 
         # container for NectarCAM data
