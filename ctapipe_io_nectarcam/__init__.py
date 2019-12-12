@@ -82,13 +82,13 @@ class NectarCAMEventSource(EventSource):
 
     def subarray(self):
         """
-	Obtain the subarray from the EventSource
+        Obtain the subarray from the EventSource
         Returns
         -------
         ctapipe.instrument.SubarrayDecription
         """
 
-	tel_id = 1
+        tel_id = 1
 
         # optics info from standard optics.fits.gz file
         optics = OpticsDescription.from_name("MST")
@@ -101,12 +101,12 @@ class NectarCAMEventSource(EventSource):
             name='MST', tel_type='MST', optics=optics, camera=camera
         )
 
-	tels = {tel_id: tel_descr}
+        tels = {tel_id: tel_descr}
 
         # LSTs telescope position taken from MC from the moment
-        tel_pos = {tel_id: [0., 0., 9.] * u.m}
+        tel_pos = {tel_id: [0., 0., 0.] * u.m}
 
-        subarray = SubarrayDescription("MST1 subarray")
+        subarray = SubarrayDescription("Adlershof")
         subarray.tels = tels
         subarray.positions = tel_pos
 
