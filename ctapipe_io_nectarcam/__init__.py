@@ -80,37 +80,52 @@ class NectarCAMEventSource(EventSource):
 
         self.log.info("Read {} input files".format(self.multi_file.num_inputs()))
 
+        self._subarray_info = self.prepare_subarray_info()
+
+
     def subarray(self):
+        return self._subarray_info
+
+
+    def prepare_subarray_info(self):
         """
-        Obtain the subarray from the EventSource
+        Constructs a SubarrayDescription object from the
+        ``telescope_descriptions`` given by ``SimTelFile``
+        Parameters
+        ----------
         Returns
         -------
-        ctapipe.instrument.SubarrayDecription
+        SubarrayDescription :
+            instrumental information
         """
+        tel_descriptions = {}  # tel_id : TelescopeDescription
+        tel_positions = {}  # tel_id : TelescopeDescription
 
-        tel_id = 1
+        for tel_id in self.data.nectarcam.tels_with_data:
+            assert (tel_id == 0)  # only one telescope for the moment (id = 0), should make this 1?
 
-        # optics info from standard optics.fits.gz file
-        optics = OpticsDescription.from_name("MST")
+            # optics info from standard optics.fits.gz file
+            optics = OpticsDescription.from_name("MST")
+            optics.tel_subtype = ''  # to correct bug in reading
 
-        # camera info from NectarCam-[geometry_version].camgeom.fits.gz file
-        geometry_version = 3
-        camera = CameraGeometry.from_name("NectarCam", geometry_version)
+            # camera info from NectarCam-[geometry_version].camgeom.fits.gz file
+            camera = CameraGeometry.from_name("NectarCam", self.geometry_version)
 
-        tel_descr = TelescopeDescription(
-            name='MST', tel_type='MST', optics=optics, camera=camera
+            tel_descr = TelescopeDescription(name='MST', tel_type='NectarCam', optics=optics, camera=camera)
+            tel_descr.optics.tel_subtype = ''  # to correct bug in reading
+
+            self.n_camera_pixels = tel_descr.camera.n_pixels
+            tels = {tel_id: tel_descr}
+
+            # MST telescope position
+            tel_positions[tel_id] = [0., 0., 0] * u.m
+            tel_descriptions[tel_id] = tel_descr
+
+        return SubarrayDescription(
+            "Adlershof",
+            tel_positions=tel_positions,
+            tel_descriptions=tel_descriptions,
         )
-
-        tels = {tel_id: tel_descr}
-
-        # LSTs telescope position taken from MC from the moment
-        tel_pos = {tel_id: [0., 0., 0.] * u.m}
-
-        subarray = SubarrayDescription("Adlershof")
-        subarray.tels = tels
-        subarray.positions = tel_pos
-
-        return subarray
 
     def _generator(self):
 
@@ -121,31 +136,6 @@ class NectarCAMEventSource(EventSource):
 
         # fill data from the CameraConfig table
         self.fill_nectarcam_service_container_from_zfile()
-
-        # Instrument information
-        for tel_id in self.data.nectarcam.tels_with_data:
-            assert (tel_id == 0)  # only one telescope for the moment (id = 0)
-
-            # optics info from standard optics.fits.gz file
-            optics = OpticsDescription.from_name("MST")
-            optics.tel_subtype = ''  # to correct bug in reading
-
-            # camera info from NectarCam-[geometry_version].camgeom.fits.gz file
-            camera = CameraGeometry.from_name("NectarCam", self.geometry_version)
-
-            tel_descr = TelescopeDescription(name='MST', tel_type='NectarCam', optics=optics, camera=camera)
-
-            tel_descr.optics.tel_subtype = ''  # to correct bug in reading
-
-            self.n_camera_pixels = tel_descr.camera.n_pixels
-            tels = {tel_id: tel_descr}
-
-            # LSTs telescope position
-            tel_pos = {tel_id: [0., 0., 0] * u.m}
-
-        self.subarray = SubarrayDescription("MST prototype subarray")
-        self.subarray.tels = tels
-        self.subarray.positions = tel_pos
 
         self.data.inst.subarray = self.subarray
 
