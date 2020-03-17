@@ -102,8 +102,6 @@ class NectarCAMEventSource(EventSource):
         tel_positions = {}  # tel_id : TelescopeDescription
 
         for tel_id in self.data.nectarcam.tels_with_data:
-            assert (tel_id == 0)  # only one telescope for the moment (id = 0), should make this 1?
-
             # optics info from standard optics.fits.gz file
             optics = OpticsDescription.from_name("MST")
             optics.tel_subtype = ''  # to correct bug in reading
@@ -115,7 +113,6 @@ class NectarCAMEventSource(EventSource):
             tel_descr.optics.tel_subtype = ''  # to correct bug in reading
 
             self.n_camera_pixels = tel_descr.camera.n_pixels
-            tels = {tel_id: tel_descr}
 
             # MST telescope position
             tel_positions[tel_id] = [0., 0., 0] * u.m
