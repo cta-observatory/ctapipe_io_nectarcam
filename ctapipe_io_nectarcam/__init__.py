@@ -77,7 +77,7 @@ class NectarCAMEventSource(EventSource):
 
         self.multi_file = MultiFiles(self.file_list)
         self.camera_config = self.multi_file.camera_config
-        self.n_camera_pixels = None
+        self.n_camera_pixels = 1855
         self.data = None
         self.log.info("Read {} input files".format(self.multi_file.num_inputs()))
 
