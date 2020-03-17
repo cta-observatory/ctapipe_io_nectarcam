@@ -77,14 +77,13 @@ class NectarCAMEventSource(EventSource):
 
         self.multi_file = MultiFiles(self.file_list)
         self.camera_config = self.multi_file.camera_config
-
+        self.n_camera_pixels = None
+        self.data = None
         self.log.info("Read {} input files".format(self.multi_file.num_inputs()))
-
-        self._subarray_info = self.prepare_subarray_info()
 
 
     def subarray(self):
-        return self._subarray_info
+        return self.prepare_subarray_info
 
 
     def prepare_subarray_info(self):
