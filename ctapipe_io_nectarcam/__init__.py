@@ -83,7 +83,7 @@ class NectarCAMEventSource(EventSource):
 
 
     def subarray(self):
-        return self.prepare_subarray_info
+        return self.prepare_subarray_info()
 
 
     def prepare_subarray_info(self):
@@ -133,7 +133,7 @@ class NectarCAMEventSource(EventSource):
         # fill data from the CameraConfig table
         self.fill_nectarcam_service_container_from_zfile()
 
-        self.data.inst.subarray = self.subarray
+        self.data.inst.subarray = self.subarray()
 
         # initialize general monitoring container
         self.initialize_mon_container()
