@@ -247,10 +247,16 @@ class NectarCAMEventSource(EventSource):
             event_container.ucts_white_rabbit_status = unpacked_cdts[6]
         else:
             event_container.ucts_timestamp = unpacked_cdts[0]
+            event_container.ucts_address = unpacked_cdts[1]
             event_container.ucts_event_counter = unpacked_cdts[2]
+            event_container.ucts_busy_counter = unpacked_cdts[3]
             event_container.ucts_pps_counter = unpacked_cdts[4]
             event_container.ucts_clock_counter = unpacked_cdts[5]
             event_container.ucts_trigger_type = unpacked_cdts[6]
+            event_container.ucts_white_rabbit_status = unpacked_cdts[7]
+            event_container.ucts_stereo_pattern = unpacked_cdts[8]
+            event_container.ucts_num_in_bunch = unpacked_cdts[9]
+            event_container.cdts_version = unpacked_cdts[10]
 
         # Unpack FEB counters and trigger pattern
         self.unpack_feb_data(event)
