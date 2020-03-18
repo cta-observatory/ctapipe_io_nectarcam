@@ -279,10 +279,10 @@ class NectarCAMEventSource(EventSource):
 
         # Unpack absolute event ID
         event_container.feb_abs_event_id[self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[0::n_fields]
-        # Unpack relative event ID
-        event_container.feb_event_id[self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[1::n_fields]
         # Unpack PPS counter
-        event_container.feb_pps_cnt[self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[2::n_fields]
+        event_container.feb_pps_cnt[self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[1::n_fields]
+        # Unpack relative event ID
+        event_container.feb_event_id[self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[2::n_fields]
         # Unpack TS1 counter
         event_container.feb_ts1[self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[3::n_fields]
         # Loop over modules
