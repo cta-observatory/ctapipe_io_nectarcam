@@ -295,6 +295,13 @@ class NectarCAMEventSource(EventSource):
                     value = unpacked_feb[n_fields*module_idx+field_id+pattern_id]
                     module_pattern = [int(digit) for digit in reversed(bin(value)[2:].zfill(7))]
                     event_container.trigger_pattern[pattern_id, offset:offset+7] = module_pattern
+
+        # Unpack native charge
+        event_container.native_charge = np.zeros(shape=(self.n_gains, self.n_camera_pixels), dtype=np.uint16)
+        rec_fmt = '=' + 'H'*self.camera_config.num_pixels
+        for gain_id in range(self.n_gains):
+            unpacked_charge = struct.unpack(rec_fmt, getattr(event.nectarcam, f'charges_gain{gain_id + 1}'))
+            event_container.native_charge[gain_id, self.camera_config.expected_pixels_id] = unpacked_charge
         
 
     def fill_r0_camera_container_from_zfile(self, container, event):

@@ -76,6 +76,7 @@ class NectarCAMEventContainer(Container):
     feb_ts1 = Field(None, "FEB TS1")
     # TODO: TS2
     trigger_pattern =  Field(None, "FEB L0 trigger pattern")
+    native_charge = Field(None, "FEB native charge")
 
 class NectarCAMCameraContainer(Container):
     """
