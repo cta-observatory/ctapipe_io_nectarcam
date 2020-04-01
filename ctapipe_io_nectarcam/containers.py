@@ -64,7 +64,12 @@ class NectarCAMEventContainer(Container):
     ucts_timestamp = Field(None, "UCTS timestamp")
     ucts_camera_timestamp = Field(None, "UCTS camera timestamp")
     ucts_trigger_type = Field(None, "UCTS trigger type")
-    ucts_white_rabbit_status = Field(None, "UCTS whiteRabbit status")
+    ucts_white_rabbit_status = Field(None, "UCTS White Rabbit status")
+    ucts_address = Field(None, "UCTS address")
+    ucts_busy_counter = Field(None, "UCTS busy counter")
+    ucts_stereo_pattern = Field(None, "UCTS stereo pattern")
+    ucts_num_in_bunch = Field(None, "UCTS num in bunch (for debugging)")
+    cdts_version = Field(None, "CDTS version")
 
     swat_data = Field([], "SWAT data array")
     counters = Field([], "counters")
