@@ -79,7 +79,8 @@ class NectarCAMEventContainer(Container):
     feb_event_id = Field(None, "FEB event count since last PPS")
     feb_pps_cnt = Field(None, "FEB count of PPS")
     feb_ts1 = Field(None, "FEB TS1")
-    # TODO: TS2
+    feb_ts2_trig = Field(None, "FEB TS2 Trigger Shift")
+    feb_ts2_pps = Field(None, "FEB TS2 PPS Shift")
     trigger_pattern =  Field(None, "FEB L0 trigger pattern")
 
 class NectarCAMCameraContainer(Container):
