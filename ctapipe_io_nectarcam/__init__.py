@@ -81,7 +81,7 @@ class NectarCAMEventSource(EventSource):
         self.data = None
         self.log.info("Read {} input files".format(self.multi_file.num_inputs()))
 
-
+    @property
     def subarray(self):
         return self.prepare_subarray_info()
 
