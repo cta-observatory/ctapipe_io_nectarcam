@@ -123,6 +123,19 @@ class NectarCAMEventSource(EventSource):
             tel_descriptions=tel_descriptions,
         )
 
+    @property
+    def is_simulation(self):
+        return False
+
+    @property
+    def datalevels(self):
+        return (DataLevel.R0, DataLevel.R1)
+
+    @property
+    def obs_id(self):
+        return None  # TODO
+
+
     def _generator(self):
 
         # container for NectarCAM data
