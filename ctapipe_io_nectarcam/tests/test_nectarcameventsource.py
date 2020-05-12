@@ -18,7 +18,7 @@ def test_loop_over_events():
         for telid in event.r0.tels_with_data:
             assert event.index.event_id == FIRST_EVENT_NUMBER_IN_FILE + i
             n_gain = 2
-            n_camera_pixels = event.inst.subarray.tels[telid].camera.n_pixels
+            n_camera_pixels = inputfile_reader.subarray().tels[0].camera.n_pixels
 
             num_samples = event.nectarcam.tel[telid].svc.num_samples
             waveform_shape = (n_gain, n_camera_pixels, num_samples)
