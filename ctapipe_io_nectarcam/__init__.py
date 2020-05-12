@@ -16,7 +16,7 @@ from ctapipe.instrument import (
     OpticsDescription,
 )
 from ctapipe.io import EventSource
-from ctapipe.io.containers import PixelStatusContainer
+from ctapipe.containers import PixelStatusContainer
 from ctapipe.core.traits import Int
 from ctapipe.core import Provenance
 from astropy.io import fits
