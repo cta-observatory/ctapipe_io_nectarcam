@@ -43,4 +43,4 @@ def test_factory_for_nectarcam_file():
     # package is detected by ctapipe
     from ctapipe_io_nectarcam import NectarCAMEventSource
     assert isinstance(reader, NectarCAMEventSource)
-    assert reader.input_url == example_file_path
+    assert str(reader.input_url) == example_file_path
