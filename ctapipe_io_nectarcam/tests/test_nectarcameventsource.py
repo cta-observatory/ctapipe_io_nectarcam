@@ -16,7 +16,7 @@ def test_loop_over_events():
     for i, event in enumerate(inputfile_reader):
         assert event.r0.tels_with_data == [0]
         for telid in event.r0.tels_with_data:
-            assert event.r0.event_id == FIRST_EVENT_NUMBER_IN_FILE + i
+            assert event.index.event_id == FIRST_EVENT_NUMBER_IN_FILE + i
             n_gain = 2
             n_camera_pixels = event.inst.subarray.tels[telid].camera.n_pixels
 
