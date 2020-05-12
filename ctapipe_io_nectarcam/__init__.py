@@ -146,8 +146,6 @@ class NectarCAMEventSource(EventSource):
         # fill data from the CameraConfig table
         self.fill_nectarcam_service_container_from_zfile()
 
-        self.data.inst.subarray = self.subarray()
-
         # initialize general monitoring container
         self.initialize_mon_container()
 
