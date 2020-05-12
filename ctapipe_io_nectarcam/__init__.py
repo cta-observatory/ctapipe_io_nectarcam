@@ -133,7 +133,7 @@ class NectarCAMEventSource(EventSource):
 
     @property
     def obs_id(self):
-        return -1  # TODO
+        return self.camera_config.nectarcam.run_id
 
 
     def _generator(self):
