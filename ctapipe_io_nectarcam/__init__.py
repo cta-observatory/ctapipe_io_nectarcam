@@ -67,7 +67,7 @@ class NectarCAMEventSource(EventSource):
         # the specified file mask (copied from  MAGICEventSourceROOT).
 
         if 'input_url' in kwargs.keys():
-            self.file_list = glob.glob(kwargs['input_url'])
+            self.file_list = glob.glob(str(kwargs['input_url']))
             self.file_list.sort()
             kwargs['input_url'] = self.file_list[0]
             super().__init__(**kwargs)
