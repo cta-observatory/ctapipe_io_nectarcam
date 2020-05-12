@@ -359,7 +359,7 @@ class NectarCAMEventSource(EventSource):
 
     def fill_r0_container_from_zfile(self, event):
         """fill the event r0 container"""
-        self.data.index.obs_id = -1
+        self.data.index.obs_id = self.obs_id
         self.data.index.event_id = event.event_id
 
         container = self.data.r0
