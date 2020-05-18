@@ -3,8 +3,8 @@ Container structures for data that should be read or written to disk
 """
 
 from ctapipe.core import Container, Field, Map
-from ctapipe.io.containers import DataContainer
-from ctapipe.io.containers import MonitoringContainer
+from ctapipe.containers import DataContainer
+from ctapipe.containers import MonitoringContainer
 
 __all__ = [
     'NectarCAMContainer',

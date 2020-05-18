@@ -16,9 +16,9 @@ def test_loop_over_events():
     for i, event in enumerate(inputfile_reader):
         assert event.r0.tels_with_data == [0]
         for telid in event.r0.tels_with_data:
-            assert event.r0.event_id == FIRST_EVENT_NUMBER_IN_FILE + i
+            assert event.index.event_id == FIRST_EVENT_NUMBER_IN_FILE + i
             n_gain = 2
-            n_camera_pixels = event.inst.subarray.tels[telid].camera.n_pixels
+            n_camera_pixels = inputfile_reader.subarray.tels[0].camera.n_pixels
 
             num_samples = event.nectarcam.tel[telid].svc.num_samples
             waveform_shape = (n_gain, n_camera_pixels, num_samples)
@@ -43,4 +43,4 @@ def test_factory_for_nectarcam_file():
     # package is detected by ctapipe
     from ctapipe_io_nectarcam import NectarCAMEventSource
     assert isinstance(reader, NectarCAMEventSource)
-    assert reader.input_url == example_file_path
+    assert str(reader.input_url) == example_file_path

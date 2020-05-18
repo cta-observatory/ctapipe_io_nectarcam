@@ -16,7 +16,7 @@ from ctapipe.instrument import (
     OpticsDescription,
 )
 from ctapipe.io import EventSource
-from ctapipe.io.containers import PixelStatusContainer
+from ctapipe.containers import PixelStatusContainer
 from ctapipe.core.traits import Int
 from ctapipe.core import Provenance
 from astropy.io import fits
@@ -67,7 +67,7 @@ class NectarCAMEventSource(EventSource):
         # the specified file mask (copied from  MAGICEventSourceROOT).
 
         if 'input_url' in kwargs.keys():
-            self.file_list = glob.glob(kwargs['input_url'])
+            self.file_list = glob.glob(str(kwargs['input_url']))
             self.file_list.sort()
             kwargs['input_url'] = self.file_list[0]
             super().__init__(**kwargs)
@@ -77,21 +77,23 @@ class NectarCAMEventSource(EventSource):
 
         self.multi_file = MultiFiles(self.file_list)
         self.camera_config = self.multi_file.camera_config
-        self.n_camera_pixels = 1855
         self.data = None
         self.log.info("Read {} input files".format(self.multi_file.num_inputs()))
+        self._tel_id = self.camera_config.telescope_id
+        self._subarray_info = self.prepare_subarray_info(self._tel_id)
 
-
+    @property
     def subarray(self):
-        return self.prepare_subarray_info()
+        return self._subarray_info
 
 
-    def prepare_subarray_info(self):
+    def prepare_subarray_info(self, tel_id=0):
         """
-        Constructs a SubarrayDescription object from the
-        ``telescope_descriptions`` given by ``SimTelFile``
+        Constructs a SubarrayDescription object.
         Parameters
         ----------
+        tel_id: int
+            Telescope identifier.
         Returns
         -------
         SubarrayDescription :
@@ -100,28 +102,40 @@ class NectarCAMEventSource(EventSource):
         tel_descriptions = {}  # tel_id : TelescopeDescription
         tel_positions = {}  # tel_id : TelescopeDescription
 
-        for tel_id in self.data.nectarcam.tels_with_data:
-            # optics info from standard optics.fits.gz file
-            optics = OpticsDescription.from_name("MST")
-            optics.tel_subtype = ''  # to correct bug in reading
+        # optics info from standard optics.fits.gz file
+        optics = OpticsDescription.from_name("MST")
+        optics.tel_subtype = ''  # to correct bug in reading
 
-            # camera info from NectarCam-[geometry_version].camgeom.fits.gz file
-            camera = CameraGeometry.from_name("NectarCam", self.geometry_version)
+        # camera info from NectarCam-[geometry_version].camgeom.fits.gz file
+        camera = CameraGeometry.from_name("NectarCam", self.geometry_version)
 
-            tel_descr = TelescopeDescription(name='MST', tel_type='NectarCam', optics=optics, camera=camera)
-            tel_descr.optics.tel_subtype = ''  # to correct bug in reading
+        tel_descr = TelescopeDescription(name='MST', tel_type='NectarCam', optics=optics, camera=camera)
+        tel_descr.optics.tel_subtype = ''  # to correct bug in reading
 
-            self.n_camera_pixels = tel_descr.camera.n_pixels
+        self.n_camera_pixels = tel_descr.camera.n_pixels
 
-            # MST telescope position
-            tel_positions[tel_id] = [0., 0., 0] * u.m
-            tel_descriptions[tel_id] = tel_descr
+        # MST telescope position
+        tel_positions[tel_id] = [0., 0., 0] * u.m
+        tel_descriptions[tel_id] = tel_descr
 
         return SubarrayDescription(
             "Adlershof",
             tel_positions=tel_positions,
             tel_descriptions=tel_descriptions,
         )
+
+    @property
+    def is_simulation(self):
+        return False
+
+    @property
+    def datalevels(self):
+        return (DataLevel.R0, DataLevel.R1)
+
+    @property
+    def obs_id(self):
+        return self.camera_config.nectarcam.run_id
+
 
     def _generator(self):
 
@@ -132,8 +146,6 @@ class NectarCAMEventSource(EventSource):
 
         # fill data from the CameraConfig table
         self.fill_nectarcam_service_container_from_zfile()
-
-        self.data.inst.subarray = self.subarray()
 
         # initialize general monitoring container
         self.initialize_mon_container()
@@ -348,11 +360,10 @@ class NectarCAMEventSource(EventSource):
 
     def fill_r0_container_from_zfile(self, event):
         """fill the event r0 container"""
+        self.data.index.obs_id = self.obs_id
+        self.data.index.event_id = event.event_id
 
         container = self.data.r0
-        container.obs_id = -1
-        container.event_id = event.event_id
-
         container.tels_with_data = [self.camera_config.telescope_id, ]
         r0_camera_container = container.tel[self.camera_config.telescope_id]
 
