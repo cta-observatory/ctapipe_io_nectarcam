@@ -3,8 +3,7 @@ Container structures for data that should be read or written to disk
 """
 
 from ctapipe.core import Container, Field, Map
-from ctapipe.containers import DataContainer
-from ctapipe.containers import MonitoringContainer
+from ctapipe.containers import ArrayEventContainer
 
 __all__ = [
     'NectarCAMContainer',
@@ -105,9 +104,8 @@ class NectarCAMContainer(Container):
         "map of tel_id to NectarCAMCameraContainer")
 
 
-class NectarCAMDataContainer(DataContainer):
+class NectarCAMDataContainer(ArrayEventContainer):
     """
     Data container including NectarCAM information
     """
     nectarcam = Field(NectarCAMContainer(), "NectarCAM specific Information")
-    mon = Field(MonitoringContainer(), "container for monitoring data (MON)")

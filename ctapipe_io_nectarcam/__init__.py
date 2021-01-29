@@ -87,6 +87,8 @@ class NectarCAMEventSource(EventSource):
         return self._subarray_info
 
 
+
+
     def prepare_subarray_info(self, tel_id=0):
         """
         Constructs a SubarrayDescription object.
@@ -133,8 +135,9 @@ class NectarCAMEventSource(EventSource):
         return (DataLevel.R0, DataLevel.R1)
 
     @property
-    def obs_id(self):
-        return self.camera_config.nectarcam.run_id
+    def obs_ids(self):
+        # currently no obs id is available from the input files
+        return [self.camera_config.configuration_id, ]
 
 
     def _generator(self):
@@ -148,7 +151,7 @@ class NectarCAMEventSource(EventSource):
         self.fill_nectarcam_service_container_from_zfile()
 
         # initialize general monitoring container
-        self.initialize_mon_container()
+        self.initialize_mon_container(self.data)
 
         # loop on events
         for count, event in enumerate(self.multi_file):
@@ -332,9 +335,9 @@ class NectarCAMEventSource(EventSource):
 
     def fill_r0_camera_container_from_zfile(self, container, event):
 
-        container.trigger_time = event.trigger_time_s
+        self.data.trigger.time = event.trigger_time_s
         #container.trigger_type = event.trigger_type
-        container.trigger_type = self.data.nectarcam.tel[self.camera_config.telescope_id].evt.tib_masked_trigger
+        self.data.trigger.event_type = self.data.nectarcam.tel[self.camera_config.telescope_id].evt.tib_masked_trigger
 
         # verify the number of gains
 
@@ -360,11 +363,11 @@ class NectarCAMEventSource(EventSource):
 
     def fill_r0_container_from_zfile(self, event):
         """fill the event r0 container"""
-        self.data.index.obs_id = self.obs_id
+        self.data.index.obs_id = self.obs_ids[0]
         self.data.index.event_id = event.event_id
 
         container = self.data.r0
-        container.tels_with_data = [self.camera_config.telescope_id, ]
+
         r0_camera_container = container.tel[self.camera_config.telescope_id]
 
         self.fill_r0_camera_container_from_zfile(
@@ -379,25 +382,24 @@ class NectarCAMEventSource(EventSource):
            r1 waveform = r0 waveform - self.baseline
 
         """
-        self.data.r1.tels_with_data = [self.camera_config.telescope_id, ]
-
+        
         r1_camera_container = self.data.r1.tel[self.camera_config.telescope_id]
         r1_camera_container.waveform = self.data.r0.tel[self.camera_config.telescope_id].waveform - self.baseline
-        r1_camera_container.trigger_type = self.data.r0.tel[self.camera_config.telescope_id].trigger_type
-        r1_camera_container.trigger_time = self.data.r0.tel[self.camera_config.telescope_id].trigger_time
+        #r1_camera_container.trigger_type = self.data.r0.tel[self.camera_config.telescope_id].trigger_type
+        #r1_camera_container.trigger_time = self.data.r0.tel[self.camera_config.telescope_id].trigger_time
 
-    def initialize_mon_container(self):
+    def initialize_mon_container(self, array_event):
         """
         Fill with MonitoringContainer.
         For the moment, initialize only the PixelStatusContainer
 
         """
-        container = self.data.mon
-        container.tels_with_data = [self.camera_config.telescope_id, ]
-        mon_camera_container = container.tel[self.camera_config.telescope_id]
+        container = array_event.mon
+        mon_camera_container = container.tel[self._tel_id]
 
         # initialize the container
         status_container = PixelStatusContainer()
+
         status_container.hardware_failing_pixels = np.zeros((self.n_gains, self.n_camera_pixels), dtype=bool)
         status_container.pedestal_failing_pixels = np.zeros((self.n_gains, self.n_camera_pixels), dtype=bool)
         status_container.flatfield_failing_pixels = np.zeros((self.n_gains, self.n_camera_pixels), dtype=bool)
