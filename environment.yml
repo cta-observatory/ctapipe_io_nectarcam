@@ -1,0 +1,21 @@
+channels:
+  - default
+dependencies:
+  - astropy>=4.1
+  - python=3.7 # nail the python version, so conda does not try upgrading / dowgrading
+  - conda-forge::ctapipe=0.10
+  - conda-forge::eventio
+  - conda-forge::corsikaio
+  - zeromq
+  - ipython
+  - numba
+  - numpy>=1.18
+  - numpydoc
+  - pytest
+  - pyyaml
+  - zlib
+  - pip
+  - h5py
+  - pip:
+      - pytest_runner
+      - https://github.com/cta-sst-1m/protozfitsreader/archive/v1.5.0.tar.gz
