@@ -48,6 +48,6 @@ jobs:
           # activate our env again
           source $CONDA/etc/profile.d/conda.sh
           conda activate ci
-          pytest --cov=ctapipe_io_lst --cov-report=xml
+          pytest --cov=ctapipe_io_nectarcam --cov-report=xml
 
       - uses: codecov/codecov-action@v1
