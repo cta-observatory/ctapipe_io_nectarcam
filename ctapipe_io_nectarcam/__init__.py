@@ -382,7 +382,7 @@ class NectarCAMEventSource(EventSource):
            r1 waveform = r0 waveform - self.baseline
 
         """
-        
+
         r1_camera_container = self.data.r1.tel[self.camera_config.telescope_id]
         r1_camera_container.waveform = self.data.r0.tel[self.camera_config.telescope_id].waveform - self.baseline
         #r1_camera_container.trigger_type = self.data.r0.tel[self.camera_config.telescope_id].trigger_type
