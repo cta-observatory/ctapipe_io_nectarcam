@@ -14,8 +14,8 @@ def test_loop_over_events():
     )
 
     for i, event in enumerate(inputfile_reader):
-        assert event.r0.tels_with_data == [0]
-        for telid in event.r0.tels_with_data:
+        assert event.trigger.tels_with_trigger == [0]
+        for telid in event.trigger.tels_with_trigger:
             assert event.index.event_id == FIRST_EVENT_NUMBER_IN_FILE + i
             n_gain = 2
             n_camera_pixels = inputfile_reader.subarray.tels[0].camera.n_pixels
@@ -35,12 +35,12 @@ def test_is_compatible():
 
 
 def test_factory_for_nectarcam_file():
-    from ctapipe.io import event_source
+    from ctapipe.io import EventSource
 
-    reader = event_source(example_file_path)
+    reader = EventSource(input_url=example_file_path)
 
     # explicit import after event_source, to test if this
     # package is detected by ctapipe
     from ctapipe_io_nectarcam import NectarCAMEventSource
     assert isinstance(reader, NectarCAMEventSource)
-    assert str(reader.input_url) == example_file_path
+

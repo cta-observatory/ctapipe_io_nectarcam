@@ -336,6 +336,7 @@ class NectarCAMEventSource(EventSource):
     def fill_r0_camera_container_from_zfile(self, container, event):
 
         self.data.trigger.time = event.trigger_time_s
+        self.data.trigger.tels_with_trigger = [self._tel_id]
         #container.trigger_type = event.trigger_type
         self.data.trigger.event_type = self.data.nectarcam.tel[self.camera_config.telescope_id].evt.tib_masked_trigger
 
