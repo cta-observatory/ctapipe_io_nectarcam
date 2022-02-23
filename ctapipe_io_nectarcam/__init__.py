@@ -18,6 +18,7 @@ from ctapipe.instrument import (
     CameraGeometry,
     OpticsDescription,
 )
+from ctapipe.coordinates import CameraFrame
 from ctapipe.io import EventSource
 from ctapipe.containers import PixelStatusContainer
 from ctapipe.core.traits import Int
@@ -46,7 +47,10 @@ def load_camera_geometry(version=3):
         'ctapipe_io_nectarcam', f'resources/NectarCam-{version:03d}.camgeom.fits.gz'
     )
     Provenance().add_input_file(f, role="CameraGeometry")
-    return CameraGeometry.from_table(f)
+    geom = CameraGeometry.from_table(f)
+    geom.frame = CameraFrame(focal_length=OPTICS.equivalent_focal_length)
+
+    return geom
 
 def read_pulse_shapes():
 
