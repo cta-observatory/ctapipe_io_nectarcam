@@ -1,4 +1,5 @@
 from ctapipe.utils import get_dataset_path
+from ctapipe_io_nectarcam.constants import N_GAINS, N_PIXELS_MODULE, N_SAMPLES, N_PIXELS
 
 FIRST_EVENT_NUMBER_IN_FILE = 1
 example_file_path = get_dataset_path("NectarCAM.Run0890.10events.fits.fz")
@@ -17,10 +18,8 @@ def test_loop_over_events():
         assert event.trigger.tels_with_trigger == [0]
         for telid in event.trigger.tels_with_trigger:
             assert event.index.event_id == FIRST_EVENT_NUMBER_IN_FILE + i
-            n_gain = 2
             n_camera_pixels = inputfile_reader.subarray.tel[0].camera.geometry.n_pixels
-            num_samples = event.nectarcam.tel[telid].svc.num_samples
-            waveform_shape = (n_gain, n_camera_pixels, num_samples)
+            waveform_shape = (N_GAINS, N_PIXELS, N_SAMPLES)
             assert event.r0.tel[telid].waveform.shape == waveform_shape
 
     # make sure max_events works
@@ -42,4 +41,19 @@ def test_factory_for_nectarcam_file():
     # package is detected by ctapipe
     from ctapipe_io_nectarcam import NectarCAMEventSource
     assert isinstance(reader, NectarCAMEventSource)
+
+def test_subarray():
+    from ctapipe_io_nectarcam import NectarCAMEventSource
+
+    n_events = 10
+    inputfile_reader = NectarCAMEventSource(
+        input_url=example_file_path,
+        max_events=n_events
+        )
+    subarray = inputfile_reader.subarray
+    subarray.info()
+    subarray.to_table()
+
+    n_camera_pixels = inputfile_reader.subarray.tel[0].camera.geometry.n_pixels
+    assert n_camera_pixels == N_PIXELS
 
