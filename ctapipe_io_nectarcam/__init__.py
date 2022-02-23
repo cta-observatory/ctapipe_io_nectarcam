@@ -21,8 +21,10 @@ from ctapipe.core.traits import Int
 from ctapipe.core import Provenance
 from astropy.io import fits
 from .containers import NectarCAMDataContainer
+from .version import __version__
 
-__all__ = ['NectarCAMEventSource']
+
+__all__ = ['NectarCAMEventSource', '__version__']
 
 
 class NectarCAMEventSource(EventSource):
