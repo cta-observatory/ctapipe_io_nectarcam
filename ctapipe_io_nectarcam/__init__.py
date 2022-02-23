@@ -140,7 +140,7 @@ class NectarCAMEventSource(EventSource):
 
     @property
     def datalevels(self):
-        return (DataLevel.R0, DataLevel.R1)
+        return (DataLevel.R0,)
 
     @property
     def subarray(self):

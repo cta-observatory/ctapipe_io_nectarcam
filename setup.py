@@ -18,7 +18,6 @@ setup(
         'astropy~=4.2',
         'ctapipe~=0.12',
         'protozfits~=2.0',
-        'setuptools_scm',
     ],
     tests_require=['pytest'],
     setup_requires=['pytest_runner'],

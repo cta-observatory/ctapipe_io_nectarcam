@@ -1,5 +1,5 @@
 from ctapipe.utils import get_dataset_path
-from ctapipe_io_nectarcam.constants import N_GAINS, N_PIXELS_MODULE, N_SAMPLES, N_PIXELS
+from ctapipe_io_nectarcam.constants import N_GAINS, N_SAMPLES, N_PIXELS
 
 FIRST_EVENT_NUMBER_IN_FILE = 1
 example_file_path = get_dataset_path("NectarCAM.Run0890.10events.fits.fz")
