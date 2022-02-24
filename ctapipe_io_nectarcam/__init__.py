@@ -18,10 +18,14 @@ from ctapipe.instrument import (
     CameraGeometry,
     OpticsDescription,
 )
+from enum import IntFlag, auto
 from ctapipe.coordinates import CameraFrame
 from ctapipe.io import EventSource
-from ctapipe.containers import PixelStatusContainer
-from ctapipe.core.traits import Int
+from ctapipe.containers import (
+    PixelStatusContainer,
+    EventType,
+)
+from ctapipe.core.traits import Int, Bool, Enum
 from ctapipe.core import Provenance
 from astropy.io import fits
 from .containers import NectarCAMDataContainer
@@ -30,6 +34,22 @@ from .constants import (
 )
 
 __all__ = ['NectarCAMEventSource']
+
+class TriggerBits(IntFlag):
+    '''
+    See TIB User manual
+    '''
+    UNKNOWN = 0
+    MONO = auto()
+    STEREO = auto()
+    CALIBRATION = auto()
+    SINGLE_PE = auto()
+    SOFTWARE = auto()
+    PEDESTAL = auto()
+    SLOW_CONTROL = auto()
+
+    PHYSICS = MONO | STEREO
+    OTHER = CALIBRATION | SINGLE_PE | SOFTWARE | PEDESTAL | SLOW_CONTROL
 
 OPTICS = OpticsDescription(
     # https://gitlab.cta-observatory.org/cta-science/simulations/simulation-model/verification/verification-process/mst-structure/-/blob/master/Appendix-MST-Structure.pdf
@@ -89,14 +109,22 @@ class NectarCAMEventSource(EventSource):
     """
     EventSource for NectarCam r0 data.
     """
-    n_gains = Int(
-        2,
-        help='Number of gains at r0/r1 level'
-    ).tag(config=True)
 
     baseline = Int(
         250,
         help='r0 waveform baseline '
+    ).tag(config=True)
+
+    trigger_information = Bool(
+        default_value=True,
+        help='Fill trigger information.'
+    ).tag(config=True)
+
+    default_trigger_type = Enum(
+        ['ucts', 'tib'], default_value='ucts',
+        help=(
+            'Default source for trigger type information.'
+        )
     ).tag(config=True)
 
     def __init__(self, **kwargs):
@@ -225,6 +253,9 @@ class NectarCAMEventSource(EventSource):
             # current method does not yield actual r1 data
             # self.fill_r1_container()
 
+            if self.trigger_information:
+                self.fill_trigger_info(self.data)
+
             # fill general monitoring data
             self.fill_mon_container_from_zfile(event)
 
@@ -333,6 +364,65 @@ class NectarCAMEventSource(EventSource):
 
         # Unpack FEB counters and trigger pattern
         self.unpack_feb_data(event)
+
+    def fill_trigger_info(self, array_event):
+        tel_id = self._tel_id
+
+        nectarcam = array_event.nectarcam.tel[tel_id]
+        tib_available = nectarcam.evt.extdevices_presence & 1
+        ucts_available = nectarcam.evt.extdevices_presence & 2
+
+        # fill trigger time using UCTS timestamp
+        trigger = array_event.trigger
+        trigger.time = nectarcam.evt.ucts_timestamp
+        trigger.tels_with_trigger = [tel_id]
+        trigger.tel[tel_id].time = trigger.time
+
+        # decide which source to use, if both are available,
+        # the option decides, if not, fallback to the avilable source
+        # if no source available, warn and do not fill trigger info
+        if tib_available and ucts_available:
+            if self.default_trigger_type == 'ucts':
+                trigger_bits = nectarcam.evt.ucts_trigger_type
+            else:
+                trigger_bits = nectarcam.evt.tib_masked_trigger
+
+        elif tib_available:
+            trigger_bits = nectarcam.evt.tib_masked_trigger
+
+        elif ucts_available:
+            trigger_bits = nectarcam.evt.ucts_trigger_type
+
+        else:
+            self.log.warning('No trigger info available.')
+            trigger.event_type = EventType.UNKNOWN
+            return
+
+        if (
+                ucts_available
+                and nectarcam.evt.ucts_trigger_type == 42 #TODO check if it's correct
+                and self.default_trigger_type == "ucts"
+        ) :
+            self.log.warning(
+                'Event with UCTS trigger_type 42 found.'
+                ' Probably means unreliable or shifted UCTS data.'
+                ' Consider switching to TIB using `default_trigger_type="tib"`'
+            )
+
+        # first bit mono trigger, second stereo.
+        # If *only* those two are set, we assume it's a physics event
+        # for all other we only check if the flag is present
+        if (trigger_bits & TriggerBits.PHYSICS) and not (trigger_bits & TriggerBits.OTHER):
+            trigger.event_type = EventType.SUBARRAY
+        elif trigger_bits & TriggerBits.CALIBRATION:
+            trigger.event_type = EventType.FLATFIELD
+        elif trigger_bits & TriggerBits.PEDESTAL:
+            trigger.event_type = EventType.SKY_PEDESTAL
+        elif trigger_bits & TriggerBits.SINGLE_PE:
+            trigger.event_type = EventType.SINGLE_PE
+        else:
+            self.log.warning(f'Event {array_event.index.event_id} has unknown event type, trigger: {trigger_bits:08b}')
+            trigger.event_type = EventType.UNKNOWN
 
     def unpack_feb_data(self, event):
         '''Unpack FEB counters and trigger pattern'''
