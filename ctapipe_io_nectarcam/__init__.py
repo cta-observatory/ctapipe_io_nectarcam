@@ -28,12 +28,15 @@ from ctapipe.containers import (
 from ctapipe.core.traits import Int, Bool, Enum
 from ctapipe.core import Provenance
 from astropy.io import fits
+from astropy.time import Time
 from .containers import NectarCAMDataContainer
 from .constants import (
     HIGH_GAIN, N_GAINS, N_PIXELS, N_SAMPLES
 )
 
 __all__ = ['NectarCAMEventSource']
+
+S_TO_NS = np.uint64(1e9)
 
 class TriggerBits(IntFlag):
     '''
@@ -103,6 +106,16 @@ def read_pulse_shapes():
     # Note we have to transpose the pulse shapes array to provide what ctapipe
     # expects:
     return daq_time_per_sample, pulse_shape_time_step, data[:,1:].T
+
+def time_from_unix_tai_ns(unix_tai_ns):
+    '''
+    Create an astropy Time instance from a unix time tai timestamp in ns.
+    By using both arguments to time, the result will be a higher precision
+    timestamp.
+    '''
+    full_seconds = unix_tai_ns // S_TO_NS
+    fractional_seconds = (unix_tai_ns % S_TO_NS) * 1e-9
+    return Time(full_seconds, fractional_seconds, format='unix_tai')
 
 
 class NectarCAMEventSource(EventSource):
@@ -374,7 +387,9 @@ class NectarCAMEventSource(EventSource):
 
         # fill trigger time using UCTS timestamp
         trigger = array_event.trigger
-        trigger.time = nectarcam.evt.ucts_timestamp
+        trigger_time = nectarcam.evt.ucts_timestamp
+        trigger_time = time_from_unix_tai_ns(trigger_time)
+        trigger.time = trigger_time
         trigger.tels_with_trigger = [tel_id]
         trigger.tel[tel_id].time = trigger.time
 
