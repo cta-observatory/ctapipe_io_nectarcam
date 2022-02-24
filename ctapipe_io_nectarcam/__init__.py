@@ -222,7 +222,8 @@ class NectarCAMEventSource(EventSource):
             self.fill_r0_container_from_zfile(event)
 
             # copy r0 to r1
-            self.fill_r1_container()
+            # current method does not yield actual r1 data
+            # self.fill_r1_container()
 
             # fill general monitoring data
             self.fill_mon_container_from_zfile(event)
