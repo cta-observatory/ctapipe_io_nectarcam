@@ -8,8 +8,8 @@ setup(
     use_scm_version={"write_to": os.path.join("ctapipe_io_nectarcam", "_version.py")},
     description='ctapipe plugin for reading NectarCam files',
     install_requires=[
-        'astropy',
-        'ctapipe',
+        'astropy~=4.2',
+        'ctapipe~=0.12',
         'protozfits~=2.0',
         'setuptools_scm',
     ],
