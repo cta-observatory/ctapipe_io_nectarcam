@@ -1,6 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """
-EventSource for LSTCam protobuf-fits.fz-files.
+EventSource for NectarCAM protobuf-fits.fz-files.
 
 Needs protozfits v1.5.0 from github.com/cta-sst-1m/protozfitsreader
 """
@@ -9,39 +9,135 @@ import numpy as np
 import glob
 import struct
 from astropy import units as u
+from pkg_resources import resource_filename
 from ctapipe.instrument import (
     TelescopeDescription,
     SubarrayDescription,
+    CameraDescription,
+    CameraReadout,
     CameraGeometry,
     OpticsDescription,
 )
+from enum import IntFlag, auto
+from ctapipe.coordinates import CameraFrame
 from ctapipe.io import EventSource
-from ctapipe.containers import PixelStatusContainer
-from ctapipe.core.traits import Int
+from ctapipe.containers import (
+    PixelStatusContainer,
+    EventType,
+)
+from ctapipe.core.traits import Int, Bool, Enum
 from ctapipe.core import Provenance
 from astropy.io import fits
+from astropy.time import Time
 from .containers import NectarCAMDataContainer
+from .constants import (
+    HIGH_GAIN, N_GAINS, N_PIXELS, N_SAMPLES
+)
 
 __all__ = ['NectarCAMEventSource']
+
+S_TO_NS = np.uint64(1e9)
+
+class TriggerBits(IntFlag):
+    '''
+    See TIB User manual
+    '''
+    UNKNOWN = 0
+    MONO = auto()
+    STEREO = auto()
+    CALIBRATION = auto()
+    SINGLE_PE = auto()
+    SOFTWARE = auto()
+    PEDESTAL = auto()
+    SLOW_CONTROL = auto()
+
+    PHYSICS = MONO | STEREO
+    OTHER = CALIBRATION | SINGLE_PE | SOFTWARE | PEDESTAL | SLOW_CONTROL
+
+OPTICS = OpticsDescription(
+    # https://gitlab.cta-observatory.org/cta-science/simulations/simulation-model/verification/verification-process/mst-structure/-/blob/master/Appendix-MST-Structure.pdf
+    # version from 20 Jan 2022
+    'MST',
+    equivalent_focal_length=u.Quantity(16., u.m),
+    num_mirrors=1,
+    mirror_area=u.Quantity(106., u.m**2), #no shadowing, uncertainty is 0.5 m2
+    num_mirror_tiles=86, # Garczarczyk 2017
+)
+
+def load_camera_geometry(version=3):
+    ''' Load camera geometry from bundled resources of this repo '''
+    f = resource_filename(
+        'ctapipe_io_nectarcam', f'resources/NectarCam-{version:03d}.camgeom.fits.gz'
+    )
+    Provenance().add_input_file(f, role="CameraGeometry")
+    geom = CameraGeometry.from_table(f)
+    geom.frame = CameraFrame(focal_length=OPTICS.equivalent_focal_length)
+
+    return geom
+
+def read_pulse_shapes():
+
+    '''
+    Reads in the data on the pulse shapes from an external file
+    Returns
+    -------
+    (daq_time_per_sample, pulse_shape_time_step, pulse shapes)
+        daq_time_per_sample: time between samples in the actual DAQ (ns, astropy quantity)
+        pulse_shape_time_step: time between samples in the returned single-p.e pulse shape (ns, astropy
+    quantity)
+        pulse shapes: Single-p.e. pulse shapes, ndarray of shape (2, 1640)
+    '''
+
+    # https://gitlab.cta-observatory.org/cta-consortium/aswg/simulations/simulation-model/simulation-model-description/-/blob/master/datFiles/Pulse_template_nectarCam_17042020.dat
+    infilename = resource_filename(
+        'ctapipe_io_nectarcam',
+        'resources/Pulse_template_nectarCam_17042020.dat'
+    )
+
+    data = np.genfromtxt(infilename, dtype='float', comments='#')
+    Provenance().add_input_file(infilename, role="PulseShapes")
+    pulse_shape_time_step = 0.125 * u.ns # file specific, change if model file is changed
+    # TODO read automatically from file
+
+    # https://gitlab.cta-observatory.org/cta-science/simulations/simulation-model/verification/verification-process/mst-nectarcam/-/blob/master/Appendix-NectarCam.pdf
+    # version from 13 Jan 2022
+    daq_time_per_sample = 1. * u.ns
+
+    # Note we have to transpose the pulse shapes array to provide what ctapipe
+    # expects:
+    return daq_time_per_sample, pulse_shape_time_step, data[:,1:].T
+
+def time_from_unix_tai_ns(unix_tai_ns):
+    '''
+    Create an astropy Time instance from a unix time tai timestamp in ns.
+    By using both arguments to time, the result will be a higher precision
+    timestamp.
+    '''
+    full_seconds = unix_tai_ns // S_TO_NS
+    fractional_seconds = (unix_tai_ns % S_TO_NS) * 1e-9
+    return Time(full_seconds, fractional_seconds, format='unix_tai')
 
 
 class NectarCAMEventSource(EventSource):
     """
     EventSource for NectarCam r0 data.
     """
-    n_gains = Int(
-        2,
-        help='Number of gains at r0/r1 level'
-    ).tag(config=True)
 
     baseline = Int(
         250,
         help='r0 waveform baseline '
     ).tag(config=True)
 
-    geometry_version = Int(
-        3,
-        help='Version of the camera geometry to be used '
+    trigger_information = Bool(
+        default_value=True,
+        help='Fill trigger information.'
+    ).tag(config=True)
+
+    default_trigger_type = Enum(
+        ['ucts', 'tib'], default_value='ucts',
+        help=(
+            'Default source for trigger type information.'
+        )
     ).tag(config=True)
 
     def __init__(self, **kwargs):
@@ -80,51 +176,8 @@ class NectarCAMEventSource(EventSource):
         self.data = None
         self.log.info("Read {} input files".format(self.multi_file.num_inputs()))
         self._tel_id = self.camera_config.telescope_id
-        self._subarray_info = self.prepare_subarray_info(self._tel_id)
-
-    @property
-    def subarray(self):
-        return self._subarray_info
-
-
-
-
-    def prepare_subarray_info(self, tel_id=0):
-        """
-        Constructs a SubarrayDescription object.
-        Parameters
-        ----------
-        tel_id: int
-            Telescope identifier.
-        Returns
-        -------
-        SubarrayDescription :
-            instrumental information
-        """
-        tel_descriptions = {}  # tel_id : TelescopeDescription
-        tel_positions = {}  # tel_id : TelescopeDescription
-
-        # optics info from standard optics.fits.gz file
-        optics = OpticsDescription.from_name("MST")
-        optics.tel_subtype = ''  # to correct bug in reading
-
-        # camera info from NectarCam-[geometry_version].camgeom.fits.gz file
-        camera = CameraGeometry.from_name("NectarCam", self.geometry_version)
-
-        tel_descr = TelescopeDescription(name='MST', tel_type='NectarCam', optics=optics, camera=camera)
-        tel_descr.optics.tel_subtype = ''  # to correct bug in reading
-
-        self.n_camera_pixels = tel_descr.camera.n_pixels
-
-        # MST telescope position
-        tel_positions[tel_id] = [0., 0., 0] * u.m
-        tel_descriptions[tel_id] = tel_descr
-
-        return SubarrayDescription(
-            "Adlershof",
-            tel_positions=tel_positions,
-            tel_descriptions=tel_descriptions,
-        )
+        self.geometry_version = 3
+        self._subarray = self.create_subarray(self.geometry_version, self._tel_id)
 
     @property
     def is_simulation(self):
@@ -132,7 +185,52 @@ class NectarCAMEventSource(EventSource):
 
     @property
     def datalevels(self):
-        return (DataLevel.R0, DataLevel.R1)
+        return (DataLevel.R0,)
+
+    @property
+    def subarray(self):
+        return self._subarray
+
+    @staticmethod
+    def create_subarray(geometry_version, tel_id=0):
+        """
+        Obtain the subarray from the EventSource
+        Returns
+        -------
+        ctapipe.instrument.SubarrayDescription
+        """
+
+        # camera info from NectarCAM-[geometry_version].camgeom.fits.gz file
+        camera_geom = load_camera_geometry(version=geometry_version)
+
+        # get info on the camera readout:
+        daq_time_per_sample, pulse_shape_time_step, pulse_shapes = read_pulse_shapes()
+
+        camera_readout = CameraReadout(
+            'NectarCam',
+            1 / daq_time_per_sample,
+            pulse_shapes,
+            pulse_shape_time_step,
+            )
+
+        camera = CameraDescription('NectarCam', camera_geom, camera_readout)
+
+        mst_tel_descr = TelescopeDescription(
+            name='NectarCam', tel_type='MST', optics=OPTICS, camera=camera
+        )
+
+        tel_descriptions = {tel_id: mst_tel_descr}
+
+        # MST telescope position
+        tel_positions = {tel_id: [0., 0., 0] * u.m}
+
+        subarray = SubarrayDescription(
+            name=f"MST-{tel_id} subarray",
+            tel_descriptions=tel_descriptions,
+            tel_positions=tel_positions,
+        )
+
+        return subarray
 
     @property
     def obs_ids(self):
@@ -165,7 +263,11 @@ class NectarCAMEventSource(EventSource):
             self.fill_r0_container_from_zfile(event)
 
             # copy r0 to r1
-            self.fill_r1_container()
+            # current method does not yield actual r1 data
+            # self.fill_r1_container()
+
+            if self.trigger_information:
+                self.fill_trigger_info(self.data)
 
             # fill general monitoring data
             self.fill_mon_container_from_zfile(event)
@@ -276,6 +378,67 @@ class NectarCAMEventSource(EventSource):
         # Unpack FEB counters and trigger pattern
         self.unpack_feb_data(event)
 
+    def fill_trigger_info(self, array_event):
+        tel_id = self._tel_id
+
+        nectarcam = array_event.nectarcam.tel[tel_id]
+        tib_available = nectarcam.evt.extdevices_presence & 1
+        ucts_available = nectarcam.evt.extdevices_presence & 2
+
+        # fill trigger time using UCTS timestamp
+        trigger = array_event.trigger
+        trigger_time = nectarcam.evt.ucts_timestamp
+        trigger_time = time_from_unix_tai_ns(trigger_time)
+        trigger.time = trigger_time
+        trigger.tels_with_trigger = [tel_id]
+        trigger.tel[tel_id].time = trigger.time
+
+        # decide which source to use, if both are available,
+        # the option decides, if not, fallback to the avilable source
+        # if no source available, warn and do not fill trigger info
+        if tib_available and ucts_available:
+            if self.default_trigger_type == 'ucts':
+                trigger_bits = nectarcam.evt.ucts_trigger_type
+            else:
+                trigger_bits = nectarcam.evt.tib_masked_trigger
+
+        elif tib_available:
+            trigger_bits = nectarcam.evt.tib_masked_trigger
+
+        elif ucts_available:
+            trigger_bits = nectarcam.evt.ucts_trigger_type
+
+        else:
+            self.log.warning('No trigger info available.')
+            trigger.event_type = EventType.UNKNOWN
+            return
+
+        if (
+                ucts_available
+                and nectarcam.evt.ucts_trigger_type == 42 #TODO check if it's correct
+                and self.default_trigger_type == "ucts"
+        ) :
+            self.log.warning(
+                'Event with UCTS trigger_type 42 found.'
+                ' Probably means unreliable or shifted UCTS data.'
+                ' Consider switching to TIB using `default_trigger_type="tib"`'
+            )
+
+        # first bit mono trigger, second stereo.
+        # If *only* those two are set, we assume it's a physics event
+        # for all other we only check if the flag is present
+        if (trigger_bits & TriggerBits.PHYSICS) and not (trigger_bits & TriggerBits.OTHER):
+            trigger.event_type = EventType.SUBARRAY
+        elif trigger_bits & TriggerBits.CALIBRATION:
+            trigger.event_type = EventType.FLATFIELD
+        elif trigger_bits & TriggerBits.PEDESTAL:
+            trigger.event_type = EventType.SKY_PEDESTAL
+        elif trigger_bits & TriggerBits.SINGLE_PE:
+            trigger.event_type = EventType.SINGLE_PE
+        else:
+            self.log.warning(f'Event {array_event.index.event_id} has unknown event type, trigger: {trigger_bits:08b}')
+            trigger.event_type = EventType.UNKNOWN
+
     def unpack_feb_data(self, event):
         '''Unpack FEB counters and trigger pattern'''
         event_container = self.data.nectarcam.tel[self.camera_config.telescope_id].evt
@@ -289,7 +452,7 @@ class NectarCAMEventSource(EventSource):
         # Unpack
         unpacked_feb =  struct.unpack(rec_fmt, event.nectarcam.counters)
         # Initialize field containers
-        n_camera_modules = self.n_camera_pixels//7
+        n_camera_modules = N_PIXELS//7
         event_container.feb_abs_event_id = np.zeros(shape=(n_camera_modules,), dtype=np.uint32)
         event_container.feb_event_id = np.zeros(shape=(n_camera_modules,), dtype=np.uint16)
         event_container.feb_pps_cnt = np.zeros(shape=(n_camera_modules,), dtype=np.uint16)
@@ -298,7 +461,7 @@ class NectarCAMEventSource(EventSource):
         event_container.feb_ts2_pps  = np.zeros(shape=(n_camera_modules,), dtype=np.int16)
         if bytes_per_module > 16:
             n_patterns = 4
-            event_container.trigger_pattern = np.zeros(shape=(n_patterns, self.n_camera_pixels), dtype=bool)
+            event_container.trigger_pattern = np.zeros(shape=(n_patterns, N_PIXELS), dtype=bool)
 
         # Unpack absolute event ID
         event_container.feb_abs_event_id[self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[0::n_fields]
@@ -326,9 +489,9 @@ class NectarCAMEventSource(EventSource):
 
         # Unpack native charge
         if len(event.nectarcam.charges_gain1) > 0:
-            event_container.native_charge = np.zeros(shape=(self.n_gains, self.n_camera_pixels), dtype=np.uint16)
+            event_container.native_charge = np.zeros(shape=(N_GAINS, N_PIXELS), dtype=np.uint16)
             rec_fmt = '=' + 'H'*self.camera_config.num_pixels
-            for gain_id in range(self.n_gains):
+            for gain_id in range(N_GAINS):
                 unpacked_charge = struct.unpack(rec_fmt, getattr(event.nectarcam, f'charges_gain{gain_id + 1}'))
                 event_container.native_charge[gain_id, self.camera_config.expected_pixels_id] = unpacked_charge
         
@@ -342,20 +505,20 @@ class NectarCAMEventSource(EventSource):
 
         # verify the number of gains
 
-        if event.waveform.shape[0] != self.camera_config.num_pixels * self.camera_config.num_samples * self.n_gains:
+        if event.waveform.shape[0] != self.camera_config.num_pixels * self.camera_config.num_samples * N_GAINS:
             raise ValueError(f"Number of gains not correct, waveform shape is {event.waveform.shape[0]}"
                              f" instead of "
-                             f"{self.camera_config.num_pixels * self.camera_config.num_samples * self.n_gains}")
+                             f"{self.camera_config.num_pixels * self.camera_config.num_samples * N_GAINS}")
 
         reshaped_waveform = np.array(
             event.waveform
-             ).reshape(self.n_gains,
+             ).reshape(N_GAINS,
                        self.camera_config.num_pixels,
                        self.camera_config.num_samples)
 
         # initialize the waveform container to zero
-        container.waveform = np.zeros([self.n_gains,
-                                       self.n_camera_pixels,
+        container.waveform = np.zeros([N_GAINS,
+                                       N_PIXELS,
                                        self.camera_config.num_samples])
 
         # re-order the waveform following the expected_pixels_id values (rank = pixel id)
@@ -401,9 +564,10 @@ class NectarCAMEventSource(EventSource):
         # initialize the container
         status_container = PixelStatusContainer()
 
-        status_container.hardware_failing_pixels = np.zeros((self.n_gains, self.n_camera_pixels), dtype=bool)
-        status_container.pedestal_failing_pixels = np.zeros((self.n_gains, self.n_camera_pixels), dtype=bool)
-        status_container.flatfield_failing_pixels = np.zeros((self.n_gains, self.n_camera_pixels), dtype=bool)
+        shape = (N_GAINS, N_PIXELS)
+        status_container.hardware_failing_pixels = np.zeros(shape, dtype=bool)
+        status_container.pedestal_failing_pixels = np.zeros(shape, dtype=bool)
+        status_container.flatfield_failing_pixels = np.zeros(shape, dtype=bool)
 
         mon_camera_container.pixel_status = status_container
 
@@ -417,11 +581,11 @@ class NectarCAMEventSource(EventSource):
         status_container = self.data.mon.tel[self.camera_config.telescope_id].pixel_status
 
         # reorder the array
-        pixel_status = np.zeros(self.n_camera_pixels)
+        pixel_status = np.zeros(N_PIXELS)
         pixel_status[self.camera_config.expected_pixels_id] = event.pixel_status
         status_container.hardware_failing_pixels[:] = pixel_status == 0
         '''
-        for gain in(np.arange(self.n_gains)):
+        for gain in(np.arange(N_GAINS)):
              pixel_status[self.camera_config.expected_pixels_id] = event.pixel_status
 
              # initialize the hardware mask
