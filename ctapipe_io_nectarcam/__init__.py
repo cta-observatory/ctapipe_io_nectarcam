@@ -33,8 +33,10 @@ from .containers import NectarCAMDataContainer
 from .constants import (
     HIGH_GAIN, N_GAINS, N_PIXELS, N_SAMPLES
 )
+from .version import __version__
 
-__all__ = ['NectarCAMEventSource']
+
+__all__ = ['NectarCAMEventSource', '__version__']
 
 S_TO_NS = np.uint64(1e9)
 
