@@ -30,6 +30,7 @@ from ctapipe.core import Provenance
 from astropy.io import fits
 from astropy.time import Time
 from .containers import NectarCAMDataContainer
+from .calibration import NectarCAMR0Corrections
 from .constants import (
     HIGH_GAIN, N_GAINS, N_PIXELS, N_SAMPLES
 )
@@ -142,6 +143,11 @@ class NectarCAMEventSource(EventSource):
         )
     ).tag(config=True)
 
+    calibrate_flatfields_and_pedestals = Bool(
+        default_value=True,
+        help='If True, flat field and pedestal events are also calibrated.'
+    ).tag(config=True)
+
     def __init__(self, **kwargs):
         """
         Constructor
@@ -180,6 +186,9 @@ class NectarCAMEventSource(EventSource):
         self._tel_id = self.camera_config.telescope_id
         self.geometry_version = 3
         self._subarray = self.create_subarray(self.geometry_version, self._tel_id)
+        self.r0_r1_calibrator = NectarCAMR0Corrections(
+            subarray=self._subarray, parent=self
+        )
 
     @property
     def is_simulation(self):
@@ -187,7 +196,9 @@ class NectarCAMEventSource(EventSource):
 
     @property
     def datalevels(self):
-        return (DataLevel.R0,)
+        if self.r0_r1_calibrator.calibration_path is not None:
+            return (DataLevel.R0, DataLevel.R1)
+        return (DataLevel.R0, )
 
     @property
     def subarray(self):
@@ -273,6 +284,15 @@ class NectarCAMEventSource(EventSource):
 
             # fill general monitoring data
             self.fill_mon_container_from_zfile(event)
+
+            # gain select and calibrate to pe
+            if self.r0_r1_calibrator.calibration_path is not None:
+                # skip flatfield and pedestal events if asked
+                if (
+                        self.calibrate_flatfields_and_pedestals
+                        or self.data.trigger.event_type not in {EventType.FLATFIELD, EventType.SKY_PEDESTAL}
+                ):
+                    self.r0_r1_calibrator.calibrate(self.data)
 
             yield self.data
 

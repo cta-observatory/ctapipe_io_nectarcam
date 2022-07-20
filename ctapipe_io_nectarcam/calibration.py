@@ -1,9 +1,24 @@
+import h5py
+import numpy as np
+from ctapipe.calib.camera.gainselection import ThresholdGainSelector
+from ctapipe.containers import MonitoringContainer
 from ctapipe.core import TelescopeComponent
 from ctapipe.core.traits import (
-    Path, IntTelescopeParameter,
-    TelescopeParameter, FloatTelescopeParameter, Bool, Float
+    Path, FloatTelescopeParameter, Bool, Float
+)
+from pkg_resources import resource_filename
 
-from ctapipe.calib.camera.gainselection import ThresholdGainSelector
+from .constants import (
+    N_GAINS, N_PIXELS, N_SAMPLES,
+    HIGH_GAIN, LOW_GAIN,
+    PIXEL_INDEX,
+)
+from .containers import NectarCAMDataContainer
+
+__all__ = [
+    'NectarCAMR0Corrections',
+]
+
 
 class NectarCAMR0Corrections(TelescopeComponent):
     """
@@ -12,44 +27,16 @@ class NectarCAMR0Corrections(TelescopeComponent):
     usually performed on the raw data by the camera server.
     This calibrator exists in ctapipe_io_nectarcam for testing and prototyping purposes.
     """
-    offset = IntTelescopeParameter(
-        default_value=250,
-        help=(
-            'Define offset to be subtracted from the waveform *additionally*'
-            ' to the pedestal. This only needs to be given when'
-            ' the pedestal calibration is not applied or the offset of the'
-            ' pedestal file is different from the data run'
-        )
-    ).tag(config=True)
-
-    r1_sample_start = IntTelescopeParameter(
-        default_value=0,
-        help='Start sample for r1 waveform',
-        allow_none=True,
-    ).tag(config=True)
-
-    r1_sample_end = IntTelescopeParameter(
-        default_value=59,
-        help='End sample for r1 waveform',
-        allow_none=True,
-    ).tag(config=True)
-
-    pedestal_path = TelescopeParameter(
-        trait=Path(exists=True, directory_ok=False, allow_none=True),
-        allow_none=True,
-        default_value=None,
-        help=(
-            'Path to pedestal file'
-            ', required when `apply_pedestal_subtraction=True`'
-        ),
-    ).tag(config=True)
 
     calibration_path = Path(
-        None, exists=True, directory_ok=False, allow_none=True,
+        default_value=resource_filename(
+            'ctapipe_io_nectarcam',
+            'resources/calibparams_run3255_pedrun3255_gainrun3155.h5'
+        ),
+        exists=True, directory_ok=False, allow_none=True,
         help='Path to calibration file',
     ).tag(config=True)
 
-    # TODO: verify if we need these factors for NectarCAM
     calib_scale_high_gain = FloatTelescopeParameter(
         default_value=1.0,
         help='High gain waveform is multiplied by this number'
@@ -61,21 +48,18 @@ class NectarCAMR0Corrections(TelescopeComponent):
     ).tag(config=True)
 
     select_gain = Bool(
-        default_value=True,
+        default_value=False,
         help='Set to False to keep both gains.'
     ).tag(config=True)
 
-    apply_pedestal_subtraction = Bool(
-        default_value=True,
-        help=(
-            'Set to False to disable pedestal subtraction.'
-            ' Providing the pedestal_path is required to perform this calibration'
-        ),
+    gain_selection_threshold = Float(
+        default_value=3500.,  # TODO: set default value appropriate for NectarCAM
+        help='Threshold for the ThresholdGainSelector.'
     ).tag(config=True)
 
-    gain_selection_threshold = Float(
-        default_value=3500, # TODO: set default value appropriate for NectarCAM
-        help='Threshold for the ThresholdGainSelector.'
+    apply_flatfield = Bool(
+        default_value=True,
+        help='Apply flatfielding coefficients.'
     ).tag(config=True)
 
     def __init__(self, subarray, config=None, parent=None, **kwargs):
@@ -101,3 +85,111 @@ class NectarCAMR0Corrections(TelescopeComponent):
 
         if self.calibration_path is not None:
             self.mon_data = self._read_calibration_file(self.calibration_path)
+
+    def calibrate(self, event: NectarCAMDataContainer):
+        for tel_id in event.r0.tel:
+            r1 = event.r1.tel[tel_id]
+            # check if waveform is already filled
+            if r1.waveform is None:
+                r1.waveform = event.r0.tel[tel_id].waveform
+
+            r1.waveform = r1.waveform.astype(np.float32, copy=False)
+
+            # TODO add this back when fixed bug
+            # # do gain selection before converting to pe
+            # # like eventbuilder will do
+            # if self.select_gain and r1.selected_gain_channel is None:
+            #     r1.selected_gain_channel = self.gain_selector(r1.waveform)
+            #     r1.waveform = r1.waveform[r1.selected_gain_channel, PIXEL_INDEX]
+
+            # apply monitoring data corrections,
+            # subtract pedestal per sample and convert to pe
+            if self.mon_data is not None:
+                calibration = self.mon_data.tel[tel_id].calibration
+                # pedestal subtraction and gain correction
+                convert_to_pe(
+                    waveform=r1.waveform,
+                    calibration=calibration,
+                    selected_gain_channel=r1.selected_gain_channel
+                )
+                # TODO add this back when fixed bug
+                # # flatfielding
+                # if self.apply_flatfield:
+                #     coefficients = self.mon_data.tel[tel_id].flatfield
+                #     flatfield(
+                #         waveform=r1.waveform,
+                #         coefficients=coefficients,
+                #         selected_gain_channel=r1.selected_gain_channel
+                #     )
+
+            # TODO add/adapt when understoood hot to select failing pixels
+            # broken_pixels = event.mon.tel[tel_id].pixel_status.hardware_failing_pixels
+            # if r1.selected_gain_channel is None:
+            #     r1.waveform[broken_pixels] = 0.0
+            # else:
+            #     r1.waveform[broken_pixels[r1.selected_gain_channel, PIXEL_INDEX]] = 0.0
+
+            # needed for charge scaling in ctpaipe dl1 calib
+            if r1.selected_gain_channel is not None:
+                relative_factor = np.empty(N_PIXELS)
+                relative_factor[r1.selected_gain_channel == HIGH_GAIN] = \
+                    self.calib_scale_high_gain.tel[tel_id]
+                relative_factor[r1.selected_gain_channel == LOW_GAIN] = \
+                    self.calib_scale_low_gain.tel[tel_id]
+            else:
+                relative_factor = np.empty((N_GAINS, N_PIXELS))
+                relative_factor[HIGH_GAIN] = self.calib_scale_high_gain.tel[tel_id]
+                relative_factor[LOW_GAIN] = self.calib_scale_low_gain.tel[tel_id]
+
+            event.calibration.tel[tel_id].dl1.relative_factor = relative_factor
+
+    @staticmethod
+    def _read_calibration_file(path, tel_id=0.):
+        """
+        Read the correction from hdf5 calibration file
+        Calibration file format may evolve in the future
+        Assumes single telescope with id = 0
+        """
+        # read h5 table
+        h5table = h5py.File(path, 'r')
+
+        # initialize monitoring containes
+        mon = MonitoringContainer()
+
+        # pedestal per sample
+        pedestal_per_sample = np.zeros((N_GAINS, N_PIXELS, N_SAMPLES))
+        pedestal_per_sample[HIGH_GAIN] = h5table['ped_hg'][:]
+        pedestal_per_sample[LOW_GAIN] = h5table['ped_lg'][:]
+        mon.tel[tel_id].calibration.pedestal_per_sample = pedestal_per_sample
+
+        # dc to pe
+        dc_to_pe = np.zeros((N_GAINS, N_PIXELS))
+        dc_to_pe[HIGH_GAIN] = h5table['gains'][:]
+        dc_to_pe[LOW_GAIN] = h5table['gains'][:] / h5table['hglg'][:]
+        mon.tel[tel_id].calibration.dc_to_pe = dc_to_pe
+
+        # flat fielding
+        mon.tel[tel_id].flatfield = h5table['ff_calib_coefs'][:]
+
+        # TODO: implement pixel status
+        # pixel status missing, require to know if pixel fails due to hardware,
+        # pedestal, or flatfielding
+
+        return mon
+
+
+def convert_to_pe(waveform, calibration, selected_gain_channel):
+    if selected_gain_channel is None:
+        waveform -= calibration.pedestal_per_sample
+        waveform *= calibration.dc_to_pe[:, :, np.newaxis]
+    else:
+        waveform = waveform - calibration.pedestal_per_sample[selected_gain_channel]
+        waveform *= calibration.dc_to_pe[selected_gain_channel, PIXEL_INDEX, np.newaxis]
+
+
+def flatfield(waveform, coefficients, selected_gain_channel):
+    if selected_gain_channel is None:
+        waveform *= coefficients[np.newaxis, :, np.newaxis]
+    else:
+        waveform *= coefficients[:, np.newaxis]
+
