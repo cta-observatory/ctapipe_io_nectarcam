@@ -1,16 +1,16 @@
-import h5py
 import numpy as np
+import tables
 from ctapipe.calib.camera.gainselection import ThresholdGainSelector
 from ctapipe.containers import MonitoringContainer
 from ctapipe.core import TelescopeComponent
 from ctapipe.core.traits import (
     Path, FloatTelescopeParameter, Bool, Float
 )
+from ctapipe.io import HDF5TableReader
 from pkg_resources import resource_filename
 
 from .constants import (
-    N_GAINS, N_PIXELS, N_SAMPLES,
-    HIGH_GAIN, LOW_GAIN,
+    N_GAINS, N_PIXELS, HIGH_GAIN, LOW_GAIN,
     PIXEL_INDEX,
 )
 from .containers import NectarCAMDataContainer
@@ -31,7 +31,7 @@ class NectarCAMR0Corrections(TelescopeComponent):
     calibration_path = Path(
         default_value=resource_filename(
             'ctapipe_io_nectarcam',
-            'resources/calibparams_run3255_pedrun3255_gainrun3155.h5'
+            'resources/calibrationfile_run3255_pedrun3255_gainrun3155.hdf5'
         ),
         exists=True, directory_ok=False, allow_none=True,
         help='Path to calibration file',
@@ -113,23 +113,23 @@ class NectarCAMR0Corrections(TelescopeComponent):
                 )
                 # flatfielding
                 if self.apply_flatfield:
-                    coefficients = self.mon_data.tel[tel_id].flatfield
-                    flatfield(
+                    flatfield = self.mon_data.tel[tel_id].flatfield
+                    apply_flatfield(
                         waveform=r1.waveform,
-                        coefficients=coefficients,
+                        flatfield=flatfield,
                         selected_gain_channel=r1.selected_gain_channel
                     )
 
-            # broken pixels either in run itself or in calibration run
-            broken_pixels = np.logical_and(
+            # do not use pixels that are broken in this run or have unusable calibration
+            unusable_pixels = np.logical_and(
                 event.mon.tel[tel_id].pixel_status.hardware_failing_pixels,
-                self.mon_data.tel[tel_id].pixel_status.hardware_failing_pixels
+                self.mon_data.tel[tel_id].calibration.unusable_pixels
             )
             # set r1 waveforms to 0 for broken pixels
             if r1.selected_gain_channel is None:
-                r1.waveform[broken_pixels] = 0.0
+                r1.waveform[unusable_pixels] = 0.0
             else:
-                r1.waveform[broken_pixels[r1.selected_gain_channel, PIXEL_INDEX]] = 0.0
+                r1.waveform[unusable_pixels[r1.selected_gain_channel, PIXEL_INDEX]] = 0.0
 
             # needed for charge scaling in ctpaipe dl1 calib
             if r1.selected_gain_channel is not None:
@@ -146,40 +146,29 @@ class NectarCAMR0Corrections(TelescopeComponent):
             event.calibration.tel[tel_id].dl1.relative_factor = relative_factor
 
     @staticmethod
-    def _read_calibration_file(path, tel_id=0.):
+    def _read_calibration_file(path):
         """
         Read the correction from hdf5 calibration file
-        Calibration file format may evolve in the future
-        Assumes single telescope with id = 0
+        Only calibration and flatfield containers are filled
         """
-        # read h5 table
-        h5table = h5py.File(path, 'r')
-
-        # initialize monitoring containes
         mon = MonitoringContainer()
 
-        # pedestal per sample
-        pedestal_per_sample = np.zeros((N_GAINS, N_PIXELS, N_SAMPLES))
-        pedestal_per_sample[HIGH_GAIN] = h5table['ped_hg'][:]
-        pedestal_per_sample[LOW_GAIN] = h5table['ped_lg'][:]
-        mon.tel[tel_id].calibration.pedestal_per_sample = pedestal_per_sample
+        with tables.open_file(path) as f:
+            tel_ids = [
+                int(key[4:]) for key in f.root._v_children.keys()
+                if key.startswith('tel_')
+            ]
 
-        # dc to pe
-        dc_to_pe = np.zeros((N_GAINS, N_PIXELS))
-        dc_to_pe[HIGH_GAIN] = 1. / h5table['gains'][:]
-        dc_to_pe[LOW_GAIN] = h5table['hglg'][:] / h5table['gains'][:]
-        mon.tel[tel_id].calibration.dc_to_pe = dc_to_pe
+        for tel_id in tel_ids:
+            with HDF5TableReader(path) as h5_table:
+                base = f'/tel_{tel_id}'
+                # read the calibration data
+                table = base + '/calibration'
+                next(h5_table.read(table, mon.tel[tel_id].calibration))
 
-        # flat fielding
-        mon.tel[tel_id].flatfield = h5table['ff_calib_coefs'][:]
-
-        # pixels with hardware failure during calibration run
-        bpx_flag = h5table['bpx_flag'][:]
-        pix_mask_daq=np.zeros((1855))
-        for ii in range(1855):
-            pix_mask_daq[ii]=1 & bpx_flag[ii]>>0
-        broken_pixels = np.array(1 - pix_mask_daq, dtype='bool')
-        mon.tel[tel_id].pixel_status.hardware_failing_pixels = broken_pixels
+                # read flat-field data
+                table = base + '/flatfield'
+                next(h5_table.read(table, mon.tel[tel_id].flatfield))
 
         return mon
 
@@ -193,8 +182,9 @@ def convert_to_pe(waveform, calibration, selected_gain_channel):
         waveform *= calibration.dc_to_pe[selected_gain_channel, PIXEL_INDEX, np.newaxis]
 
 
-def flatfield(waveform, coefficients, selected_gain_channel):
+def apply_flatfield(waveform, flatfield, selected_gain_channel):
     if selected_gain_channel is None:
-        waveform *= coefficients[np.newaxis, :, np.newaxis]
+        waveform *= flatfield.relative_gain_mean[:, :, np.newaxis]
     else:
-        waveform *= coefficients[:, np.newaxis]
+        waveform *= flatfield.relative_gain_mean[
+            selected_gain_channel, PIXEL_INDEX, np.newaxis]
