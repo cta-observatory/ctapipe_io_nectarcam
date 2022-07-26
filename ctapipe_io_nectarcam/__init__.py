@@ -652,14 +652,6 @@ class NectarCAMEventSource(EventSource):
         pixel_status = np.zeros(N_PIXELS)
         pixel_status[self.camera_config.expected_pixels_id] = event.pixel_status
         status_container.hardware_failing_pixels[:] = pixel_status == 0
-        '''
-        for gain in(np.arange(N_GAINS)):
-             pixel_status[self.camera_config.expected_pixels_id] = event.pixel_status
-
-             # initialize the hardware mask
-             status_container.hardware_failing_pixels[gain] = pixel_status == 0
-        '''
-
 
 class MultiFiles:
     """

@@ -53,7 +53,7 @@ class NectarCAMR0Corrections(TelescopeComponent):
     ).tag(config=True)
 
     gain_selection_threshold = Float(
-        default_value=3500.,  # TODO: set default value appropriate for NectarCAM
+        default_value=3500.,
         help='Threshold for the ThresholdGainSelector.'
     ).tag(config=True)
 
@@ -95,12 +95,11 @@ class NectarCAMR0Corrections(TelescopeComponent):
 
             r1.waveform = r1.waveform.astype(np.float32, copy=False)
 
-            # TODO add this back when fixed bug
-            # # do gain selection before converting to pe
-            # # like eventbuilder will do
-            # if self.select_gain and r1.selected_gain_channel is None:
-            #     r1.selected_gain_channel = self.gain_selector(r1.waveform)
-            #     r1.waveform = r1.waveform[r1.selected_gain_channel, PIXEL_INDEX]
+            # do gain selection before converting to pe
+            # like eventbuilder will do
+            if self.select_gain and r1.selected_gain_channel is None:
+                r1.selected_gain_channel = self.gain_selector(r1.waveform)
+                r1.waveform = r1.waveform[r1.selected_gain_channel, PIXEL_INDEX]
 
             # apply monitoring data corrections,
             # subtract pedestal per sample and convert to pe
@@ -112,22 +111,25 @@ class NectarCAMR0Corrections(TelescopeComponent):
                     calibration=calibration,
                     selected_gain_channel=r1.selected_gain_channel
                 )
-                # TODO add this back when fixed bug
-                # # flatfielding
-                # if self.apply_flatfield:
-                #     coefficients = self.mon_data.tel[tel_id].flatfield
-                #     flatfield(
-                #         waveform=r1.waveform,
-                #         coefficients=coefficients,
-                #         selected_gain_channel=r1.selected_gain_channel
-                #     )
+                # flatfielding
+                if self.apply_flatfield:
+                    coefficients = self.mon_data.tel[tel_id].flatfield
+                    flatfield(
+                        waveform=r1.waveform,
+                        coefficients=coefficients,
+                        selected_gain_channel=r1.selected_gain_channel
+                    )
 
-            # TODO add/adapt when understoood hot to select failing pixels
-            # broken_pixels = event.mon.tel[tel_id].pixel_status.hardware_failing_pixels
-            # if r1.selected_gain_channel is None:
-            #     r1.waveform[broken_pixels] = 0.0
-            # else:
-            #     r1.waveform[broken_pixels[r1.selected_gain_channel, PIXEL_INDEX]] = 0.0
+            # broken pixels either in run itself or in calibration run
+            broken_pixels = np.logical_and(
+                event.mon.tel[tel_id].pixel_status.hardware_failing_pixels,
+                self.mon_data.tel[tel_id].pixel_status.hardware_failing_pixels
+            )
+            # set r1 waveforms to 0 for broken pixels
+            if r1.selected_gain_channel is None:
+                r1.waveform[broken_pixels] = 0.0
+            else:
+                r1.waveform[broken_pixels[r1.selected_gain_channel, PIXEL_INDEX]] = 0.0
 
             # needed for charge scaling in ctpaipe dl1 calib
             if r1.selected_gain_channel is not None:
@@ -164,16 +166,20 @@ class NectarCAMR0Corrections(TelescopeComponent):
 
         # dc to pe
         dc_to_pe = np.zeros((N_GAINS, N_PIXELS))
-        dc_to_pe[HIGH_GAIN] = h5table['gains'][:]
-        dc_to_pe[LOW_GAIN] = h5table['gains'][:] / h5table['hglg'][:]
+        dc_to_pe[HIGH_GAIN] = 1. / h5table['gains'][:]
+        dc_to_pe[LOW_GAIN] = h5table['hglg'][:] / h5table['gains'][:]
         mon.tel[tel_id].calibration.dc_to_pe = dc_to_pe
 
         # flat fielding
         mon.tel[tel_id].flatfield = h5table['ff_calib_coefs'][:]
 
-        # TODO: implement pixel status
-        # pixel status missing, require to know if pixel fails due to hardware,
-        # pedestal, or flatfielding
+        # pixels with hardware failure during calibration run
+        bpx_flag = h5table['bpx_flag'][:]
+        pix_mask_daq=np.zeros((1855))
+        for ii in range(1855):
+            pix_mask_daq[ii]=1 & bpx_flag[ii]>>0
+        broken_pixels = np.array(1 - pix_mask_daq, dtype='bool')
+        mon.tel[tel_id].pixel_status.hardware_failing_pixels = broken_pixels
 
         return mon
 
@@ -192,4 +198,3 @@ def flatfield(waveform, coefficients, selected_gain_channel):
         waveform *= coefficients[np.newaxis, :, np.newaxis]
     else:
         waveform *= coefficients[:, np.newaxis]
-
