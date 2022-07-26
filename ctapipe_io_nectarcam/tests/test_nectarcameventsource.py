@@ -1,5 +1,6 @@
 from ctapipe.utils import get_dataset_path
 from ctapipe_io_nectarcam.constants import N_GAINS, N_SAMPLES, N_PIXELS
+from traitlets.config import Config
 
 FIRST_EVENT_NUMBER_IN_FILE = 1
 example_file_path = get_dataset_path("NectarCAM.Run0890.10events.fits.fz")
@@ -14,12 +15,11 @@ def test_loop_over_events():
         max_events=n_events
     )
 
+    waveform_shape = (N_GAINS, N_PIXELS, N_SAMPLES)
     for i, event in enumerate(inputfile_reader):
         assert event.trigger.tels_with_trigger == [0]
         for telid in event.trigger.tels_with_trigger:
             assert event.index.event_id == FIRST_EVENT_NUMBER_IN_FILE + i
-            n_camera_pixels = inputfile_reader.subarray.tel[0].camera.geometry.n_pixels
-            waveform_shape = (N_GAINS, N_PIXELS, N_SAMPLES)
             assert event.r0.tel[telid].waveform.shape == waveform_shape
 
     # make sure max_events works
@@ -56,4 +56,49 @@ def test_subarray():
 
     n_camera_pixels = inputfile_reader.subarray.tel[0].camera.geometry.n_pixels
     assert n_camera_pixels == N_PIXELS
+
+def test_r1_waveforms():
+    from ctapipe_io_nectarcam import NectarCAMEventSource
+
+    # without gain selection
+    config = Config(dict(
+        NectarCAMEventSource=dict(
+            NectarCAMR0Corrections=dict(
+                select_gain = False,
+            )
+        )
+    ))
+
+    n_events = 10
+    inputfile_reader = NectarCAMEventSource(
+        input_url=example_file_path,
+        max_events = n_events,
+        config = config
+    )
+
+    waveform_shape = (N_GAINS, N_PIXELS, N_SAMPLES)
+    for i, event in enumerate(inputfile_reader):
+        for telid in event.trigger.tels_with_trigger:
+            assert event.r1.tel[telid].waveform.shape == waveform_shape
+
+    # with gain selection
+    config = Config(dict(
+        NectarCAMEventSource=dict(
+            NectarCAMR0Corrections=dict(
+                select_gain = True,
+            )
+        )
+    ))
+
+    n_events = 10
+    inputfile_reader = NectarCAMEventSource(
+        input_url=example_file_path,
+        max_events = n_events,
+        config = config
+    )
+
+    waveform_shape = (N_PIXELS, N_SAMPLES)
+    for i, event in enumerate(inputfile_reader):
+        for telid in event.trigger.tels_with_trigger:
+            assert event.r1.tel[telid].waveform.shape == waveform_shape
 
