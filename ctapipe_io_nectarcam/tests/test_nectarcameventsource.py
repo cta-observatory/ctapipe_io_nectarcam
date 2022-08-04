@@ -98,7 +98,7 @@ def test_r1_waveforms():
     )
 
     waveform_shape = (N_PIXELS, N_SAMPLES)
-    for i, event in enumerate(inputfile_reader):
+    for event in inputfile_reader:
         for telid in event.trigger.tels_with_trigger:
             assert event.r1.tel[telid].waveform.shape == waveform_shape
 
