@@ -30,6 +30,11 @@ from ctapipe.core import Provenance
 from astropy.io import fits
 from astropy.time import Time
 from .containers import NectarCAMDataContainer
+from .anyarray_dtypes import (
+    CDTS_AFTER_37201_DTYPE,
+    CDTS_BEFORE_37201_DTYPE,
+    TIB_DTYPE,
+)
 from .constants import (
     HIGH_GAIN, N_GAINS, N_PIXELS, N_SAMPLES
 )
@@ -357,28 +362,28 @@ class NectarCAMEventSource(EventSource):
 
         # unpack CDTS data
         is_old_cdts = len(event.nectarcam.cdts_data) < 36
-        rec_fmt = '=IIIQQBBB' if is_old_cdts else '=QIIIIIBBBBI'
-        unpacked_cdts =  struct.unpack(rec_fmt, event.nectarcam.cdts_data)
         if is_old_cdts:
-            event_container.ucts_event_counter = unpacked_cdts[0]
-            event_container.ucts_pps_counter = unpacked_cdts[1]
-            event_container.ucts_clock_counter = unpacked_cdts[2]
-            event_container.ucts_timestamp = unpacked_cdts[3]
-            event_container.ucts_camera_timestamp = unpacked_cdts[4]
-            event_container.ucts_trigger_type = unpacked_cdts[5]
-            event_container.ucts_white_rabbit_status = unpacked_cdts[6]
+            cdts = event.nectarcam.cdts_data.view(CDTS_BEFORE_37201_DTYPE)[0]
+            event_container.ucts_event_counter = cdts[0]
+            event_container.ucts_pps_counter = cdts[1]
+            event_container.ucts_clock_counter = cdts[2]
+            event_container.ucts_timestamp = cdts[3]
+            event_container.ucts_camera_timestamp = cdts[4]
+            event_container.ucts_trigger_type = cdts[5]
+            event_container.ucts_white_rabbit_status = cdts[6]
         else:
-            event_container.ucts_timestamp = unpacked_cdts[0]
-            event_container.ucts_address = unpacked_cdts[1]
-            event_container.ucts_event_counter = unpacked_cdts[2]
-            event_container.ucts_busy_counter = unpacked_cdts[3]
-            event_container.ucts_pps_counter = unpacked_cdts[4]
-            event_container.ucts_clock_counter = unpacked_cdts[5]
-            event_container.ucts_trigger_type = unpacked_cdts[6]
-            event_container.ucts_white_rabbit_status = unpacked_cdts[7]
-            event_container.ucts_stereo_pattern = unpacked_cdts[8]
-            event_container.ucts_num_in_bunch = unpacked_cdts[9]
-            event_container.cdts_version = unpacked_cdts[10]
+            cdts = event.nectarcam.cdts_data.view(CDTS_AFTER_37201_DTYPE)[0]
+            event_container.ucts_timestamp = cdts[0]
+            event_container.ucts_address = cdts[1]        # new
+            event_container.ucts_event_counter = cdts[2]
+            event_container.ucts_busy_counter = cdts[3]   # new
+            event_container.ucts_pps_counter = cdts[4]
+            event_container.ucts_clock_counter = cdts[5]
+            event_container.ucts_trigger_type = cdts[6]
+            event_container.ucts_white_rabbit_status = cdts[7]
+            event_container.ucts_stereo_pattern = cdts[8] # new
+            event_container.ucts_num_in_bunch = cdts[9]   # new
+            event_container.ucts_cdts_version = cdts[10]  # new
 
         # Unpack FEB counters and trigger pattern
         self.unpack_feb_data(event)
