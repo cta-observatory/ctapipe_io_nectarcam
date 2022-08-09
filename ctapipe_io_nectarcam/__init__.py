@@ -110,14 +110,17 @@ def read_pulse_shapes():
     return daq_time_per_sample, pulse_shape_time_step, data[:,1:].T
 
 def time_from_unix_tai_ns(unix_tai_ns):
-    '''
+    """
     Create an astropy Time instance from a unix time tai timestamp in ns.
     By using both arguments to time, the result will be a higher precision
     timestamp.
-    '''
+    """
+    # make sure input is really uint64
+    unix_tai_ns = np.asanyarray(unix_tai_ns, dtype=np.uint64)
+
     full_seconds = unix_tai_ns // S_TO_NS
-    fractional_seconds = (unix_tai_ns % S_TO_NS) * 1e-9
-    return Time(full_seconds, fractional_seconds, format='unix_tai')
+    fractional_seconds = (unix_tai_ns % S_TO_NS) / S_TO_NS
+    return Time(full_seconds, fractional_seconds, format="unix_tai")
 
 
 class NectarCAMEventSource(EventSource):
