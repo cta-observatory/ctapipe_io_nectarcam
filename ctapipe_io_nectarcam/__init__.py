@@ -123,9 +123,8 @@ def time_from_unix_tai_ns(unix_tai_ns):
     # make sure input is really uint64
     unix_tai_ns = np.asanyarray(unix_tai_ns, dtype=np.uint64)
 
-    full_seconds = unix_tai_ns // S_TO_NS
-    fractional_seconds = (unix_tai_ns % S_TO_NS) / S_TO_NS
-    return Time(full_seconds, fractional_seconds, format="unix_tai")
+    seconds, nanoseconds = np.divmod(unix_tai_ns, S_TO_NS)
+    return Time(seconds, nanoseconds / S_TO_NS, format="unix_tai")
 
 
 class NectarCAMEventSource(EventSource):
