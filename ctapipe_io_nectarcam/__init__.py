@@ -380,7 +380,7 @@ class NectarCAMEventSource(EventSource):
             nec_evt.ucts_white_rabbit_status = cdts[7]
             nec_evt.ucts_stereo_pattern = cdts[8] # new
             nec_evt.ucts_num_in_bunch = cdts[9]   # new
-            nec_evt.ucts_cdts_version = cdts[10]  # new
+            nec_evt.cdts_version = cdts[10]  # new
 
         # Unpack FEB counters and trigger pattern
         self.unpack_feb_data(event)
