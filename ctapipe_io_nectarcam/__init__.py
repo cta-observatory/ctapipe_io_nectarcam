@@ -335,53 +335,53 @@ class NectarCAMEventSource(EventSource):
         # svc_container.pre_proc_algorithms = camera_config.nectarcam.pre_proc_algorithms
 
     def fill_nectarcam_event_container_from_zfile(self, event):
-        event_container = self.data.nectarcam.tel[self.camera_config.telescope_id].evt
+        nec_evt = self.data.nectarcam.tel[self.camera_config.telescope_id].evt
 
-        event_container.configuration_id = event.configuration_id
-        event_container.event_id = event.event_id
-        event_container.tel_event_id = event.tel_event_id
-        event_container.pixel_status = event.pixel_status
-        event_container.ped_id = event.ped_id
-        event_container.module_status = event.nectarcam.module_status
-        event_container.extdevices_presence = event.nectarcam.extdevices_presence
-        #event_container.tib_data = event.nectarcam.tib_data
-        #event_container.cdts_data = event.nectarcam.cdts_data
-        event_container.swat_data = event.nectarcam.swat_data
-        event_container.counters = event.nectarcam.counters
+        nec_evt.configuration_id = event.configuration_id
+        nec_evt.event_id = event.event_id
+        nec_evt.tel_event_id = event.tel_event_id
+        nec_evt.pixel_status = event.pixel_status
+        nec_evt.ped_id = event.ped_id
+        nec_evt.module_status = event.nectarcam.module_status
+        nec_evt.extdevices_presence = event.nectarcam.extdevices_presence
+        #nec_evt.tib_data = event.nectarcam.tib_data
+        #nec_evt.cdts_data = event.nectarcam.cdts_data
+        nec_evt.swat_data = event.nectarcam.swat_data
+        nec_evt.counters = event.nectarcam.counters
 
         # unpack TIB data
         rec_fmt = '=IHIBB'
         unpacked_tib = struct.unpack(rec_fmt, event.nectarcam.tib_data)
-        event_container.tib_event_counter = unpacked_tib[0]
-        event_container.tib_pps_counter = unpacked_tib[1]
-        event_container.tib_tenMHz_counter = unpacked_tib[2]
-        event_container.tib_stereo_pattern = unpacked_tib[3]
-        event_container.tib_masked_trigger = unpacked_tib[4]
+        nec_evt.tib_event_counter = unpacked_tib[0]
+        nec_evt.tib_pps_counter = unpacked_tib[1]
+        nec_evt.tib_tenMHz_counter = unpacked_tib[2]
+        nec_evt.tib_stereo_pattern = unpacked_tib[3]
+        nec_evt.tib_masked_trigger = unpacked_tib[4]
 
         # unpack CDTS data
         is_old_cdts = len(event.nectarcam.cdts_data) < 36
         if is_old_cdts:
             cdts = event.nectarcam.cdts_data.view(CDTS_BEFORE_37201_DTYPE)[0]
-            event_container.ucts_event_counter = cdts[0]
-            event_container.ucts_pps_counter = cdts[1]
-            event_container.ucts_clock_counter = cdts[2]
-            event_container.ucts_timestamp = cdts[3]
-            event_container.ucts_camera_timestamp = cdts[4]
-            event_container.ucts_trigger_type = cdts[5]
-            event_container.ucts_white_rabbit_status = cdts[6]
+            nec_evt.ucts_event_counter = cdts[0]
+            nec_evt.ucts_pps_counter = cdts[1]
+            nec_evt.ucts_clock_counter = cdts[2]
+            nec_evt.ucts_timestamp = cdts[3]
+            nec_evt.ucts_camera_timestamp = cdts[4]
+            nec_evt.ucts_trigger_type = cdts[5]
+            nec_evt.ucts_white_rabbit_status = cdts[6]
         else:
             cdts = event.nectarcam.cdts_data.view(CDTS_AFTER_37201_DTYPE)[0]
-            event_container.ucts_timestamp = cdts[0]
-            event_container.ucts_address = cdts[1]        # new
-            event_container.ucts_event_counter = cdts[2]
-            event_container.ucts_busy_counter = cdts[3]   # new
-            event_container.ucts_pps_counter = cdts[4]
-            event_container.ucts_clock_counter = cdts[5]
-            event_container.ucts_trigger_type = cdts[6]
-            event_container.ucts_white_rabbit_status = cdts[7]
-            event_container.ucts_stereo_pattern = cdts[8] # new
-            event_container.ucts_num_in_bunch = cdts[9]   # new
-            event_container.ucts_cdts_version = cdts[10]  # new
+            nec_evt.ucts_timestamp = cdts[0]
+            nec_evt.ucts_address = cdts[1]        # new
+            nec_evt.ucts_event_counter = cdts[2]
+            nec_evt.ucts_busy_counter = cdts[3]   # new
+            nec_evt.ucts_pps_counter = cdts[4]
+            nec_evt.ucts_clock_counter = cdts[5]
+            nec_evt.ucts_trigger_type = cdts[6]
+            nec_evt.ucts_white_rabbit_status = cdts[7]
+            nec_evt.ucts_stereo_pattern = cdts[8] # new
+            nec_evt.ucts_num_in_bunch = cdts[9]   # new
+            nec_evt.ucts_cdts_version = cdts[10]  # new
 
         # Unpack FEB counters and trigger pattern
         self.unpack_feb_data(event)
