@@ -350,13 +350,12 @@ class NectarCAMEventSource(EventSource):
         nec_evt.counters = event.nectarcam.counters
 
         # unpack TIB data
-        rec_fmt = '=IHIBB'
-        unpacked_tib = struct.unpack(rec_fmt, event.nectarcam.tib_data)
-        nec_evt.tib_event_counter = unpacked_tib[0]
-        nec_evt.tib_pps_counter = unpacked_tib[1]
-        nec_evt.tib_tenMHz_counter = unpacked_tib[2]
-        nec_evt.tib_stereo_pattern = unpacked_tib[3]
-        nec_evt.tib_masked_trigger = unpacked_tib[4]
+        tib = event.nectarcam.tib_data.view(TIB_DTYPE)[0]
+        nec_evt.tib_event_counter = tib[0]
+        nec_evt.tib_pps_counter = tib[1]
+        nec_evt.tib_tenMHz_counter = tib[2]
+        nec_evt.tib_stereo_pattern = tib[3]
+        nec_evt.tib_masked_trigger = tib[4]
 
         # unpack CDTS data
         is_old_cdts = len(event.nectarcam.cdts_data) < 36
