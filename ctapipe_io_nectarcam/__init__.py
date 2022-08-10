@@ -357,7 +357,6 @@ class NectarCAMEventSource(EventSource):
         event_container.tib_tenMHz_counter = unpacked_tib[2]
         event_container.tib_stereo_pattern = unpacked_tib[3]
         event_container.tib_masked_trigger = unpacked_tib[4]
-        event_container.swat_data = event.lstcam.swat_data
 
         # unpack CDTS data
         is_old_cdts = len(event.nectarcam.cdts_data) < 36
