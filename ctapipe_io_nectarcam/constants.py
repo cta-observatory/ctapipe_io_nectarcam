@@ -1,3 +1,5 @@
+import numpy as np
+
 N_GAINS = 2
 N_MODULES = 265
 N_PIXELS_MODULE = 7
@@ -5,3 +7,5 @@ N_PIXELS = N_MODULES * N_PIXELS_MODULE
 N_SAMPLES = 60
 HIGH_GAIN = 0
 LOW_GAIN = 1
+
+PIXEL_INDEX = np.arange(N_PIXELS)
