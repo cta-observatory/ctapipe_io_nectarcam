@@ -412,7 +412,7 @@ class NectarCAMEventSource(EventSource):
             event_container.ucts_trigger_type = unpacked_cdts[5]
             event_container.ucts_white_rabbit_status = unpacked_cdts[6]
         else:
-            cdts = event.nectarcam.cdts_data.view(CDTS_AFTER_37201_DTYPE)[0]
+            unpacked_cdts = event.nectarcam.cdts_data.view(CDTS_AFTER_37201_DTYPE)[0]
             event_container.ucts_timestamp = unpacked_cdts[0]
             event_container.ucts_address = unpacked_cdts[1]  # new
             event_container.ucts_event_counter = unpacked_cdts[2]
