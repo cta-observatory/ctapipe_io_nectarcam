@@ -35,6 +35,11 @@ from .constants import (
 )
 from .containers import NectarCAMDataContainer, NectarCAMServiceContainer, \
     NectarCAMEventContainer
+from .anyarray_dtypes import (
+    CDTS_AFTER_37201_DTYPE,
+    CDTS_BEFORE_37201_DTYPE,
+    TIB_DTYPE,
+)
 from .version import __version__
 
 __all__ = ['NectarCAMEventSource', '__version__']
@@ -133,15 +138,16 @@ def read_pulse_shapes():
 
 
 def time_from_unix_tai_ns(unix_tai_ns):
-    '''
+    """
     Create an astropy Time instance from a unix time tai timestamp in ns.
     By using both arguments to time, the result will be a higher precision
     timestamp.
-    '''
-    full_seconds = unix_tai_ns // S_TO_NS
-    fractional_seconds = (unix_tai_ns % S_TO_NS) * 1e-9
-    return Time(full_seconds, fractional_seconds, format='unix_tai')
+    """
+    # make sure input is really uint64
+    unix_tai_ns = np.asanyarray(unix_tai_ns, dtype=np.uint64)
 
+    seconds, nanoseconds = np.divmod(unix_tai_ns, S_TO_NS)
+    return Time(seconds, nanoseconds / S_TO_NS, format="unix_tai")
 
 class NectarCAMEventSource(EventSource):
     """
@@ -383,26 +389,21 @@ class NectarCAMEventSource(EventSource):
         event_container.ped_id = event.ped_id
         event_container.module_status = event.nectarcam.module_status
         event_container.extdevices_presence = event.nectarcam.extdevices_presence
-        # event_container.tib_data = event.nectarcam.tib_data
-        # event_container.cdts_data = event.nectarcam.cdts_data
         event_container.swat_data = event.nectarcam.swat_data
         event_container.counters = event.nectarcam.counters
 
         # unpack TIB data
-        rec_fmt = '=IHIBB'
-        unpacked_tib = struct.unpack(rec_fmt, event.nectarcam.tib_data)
+        unpacked_tib = event.nectarcam.tib_data.view(TIB_DTYPE)[0]
         event_container.tib_event_counter = unpacked_tib[0]
         event_container.tib_pps_counter = unpacked_tib[1]
         event_container.tib_tenMHz_counter = unpacked_tib[2]
         event_container.tib_stereo_pattern = unpacked_tib[3]
         event_container.tib_masked_trigger = unpacked_tib[4]
-        event_container.swat_data = event.lstcam.swat_data
 
         # unpack CDTS data
         is_old_cdts = len(event.nectarcam.cdts_data) < 36
-        rec_fmt = '=IIIQQBBB' if is_old_cdts else '=QIIIIIBBBBI'
-        unpacked_cdts = struct.unpack(rec_fmt, event.nectarcam.cdts_data)
         if is_old_cdts:
+            unpacked_cdts = event.nectarcam.cdts_data.view(CDTS_BEFORE_37201_DTYPE)[0]
             event_container.ucts_event_counter = unpacked_cdts[0]
             event_container.ucts_pps_counter = unpacked_cdts[1]
             event_container.ucts_clock_counter = unpacked_cdts[2]
@@ -411,17 +412,18 @@ class NectarCAMEventSource(EventSource):
             event_container.ucts_trigger_type = unpacked_cdts[5]
             event_container.ucts_white_rabbit_status = unpacked_cdts[6]
         else:
+            unpacked_cdts = event.nectarcam.cdts_data.view(CDTS_AFTER_37201_DTYPE)[0]
             event_container.ucts_timestamp = unpacked_cdts[0]
-            event_container.ucts_address = unpacked_cdts[1]
+            event_container.ucts_address = unpacked_cdts[1]  # new
             event_container.ucts_event_counter = unpacked_cdts[2]
-            event_container.ucts_busy_counter = unpacked_cdts[3]
+            event_container.ucts_busy_counter = unpacked_cdts[3]  # new
             event_container.ucts_pps_counter = unpacked_cdts[4]
             event_container.ucts_clock_counter = unpacked_cdts[5]
             event_container.ucts_trigger_type = unpacked_cdts[6]
             event_container.ucts_white_rabbit_status = unpacked_cdts[7]
-            event_container.ucts_stereo_pattern = unpacked_cdts[8]
-            event_container.ucts_num_in_bunch = unpacked_cdts[9]
-            event_container.cdts_version = unpacked_cdts[10]
+            event_container.ucts_stereo_pattern = unpacked_cdts[8]  # new
+            event_container.ucts_num_in_bunch = unpacked_cdts[9]  # new
+            event_container.cdts_version = unpacked_cdts[10]  # new
 
         # Unpack FEB counters and trigger pattern
         self.unpack_feb_data(event_container, event)
