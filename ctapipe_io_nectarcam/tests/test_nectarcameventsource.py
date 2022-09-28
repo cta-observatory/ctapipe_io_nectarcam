@@ -63,6 +63,7 @@ def test_time_precision():
     from ctapipe_io_nectarcam import time_from_unix_tai_ns
     from astropy import units as u
     from math import fabs
+
     tticks1 = int(1659704534052529046)
     delta = 741
     time1 = time_from_unix_tai_ns(tticks1)
