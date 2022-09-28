@@ -59,13 +59,14 @@ def test_subarray():
 
 def test_time_precision():
     """Make sure UCTS time precision is not lost
-    during conversion to astropy Time."""
+    during conversion to astropy Time, even if timestamp is cast to an int."""
     from ctapipe_io_nectarcam import time_from_unix_tai_ns
     from astropy import units as u
     from math import fabs
-    tticks1 = 1659704534052529046
+    tticks1 = int(1659704534052529046)
     delta = 741
-    time1, time2 = time_from_unix_tai_ns([tticks1, tticks1 + delta])
+    time1 = time_from_unix_tai_ns(tticks1)
+    time2 = time_from_unix_tai_ns(tticks1 + delta)
     assert fabs((time2 - time1).to_value(u.ns) - delta) < 1
 
 def test_r1_waveforms():
