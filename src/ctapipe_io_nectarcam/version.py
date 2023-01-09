@@ -16,6 +16,6 @@ except Exception:
         " does not include version information and should be avoided."
     )
     del warnings
-    version = "0.0.0"
+    version = "0.1.dev1"
 
 __version__ = version
