@@ -14,6 +14,7 @@ from .constants import (
     PIXEL_INDEX,
 )
 from .containers import NectarCAMDataContainer
+import h5py
 
 __all__ = [
     'NectarCAMR0Corrections',
