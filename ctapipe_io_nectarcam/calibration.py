@@ -153,6 +153,9 @@ class NectarCAMR0Corrections(TelescopeComponent):
         """
         mon = MonitoringContainer()
 
+        with h5py.File(path, mode='r+') as f:
+            remove_filters(f)
+
         with tables.open_file(path) as f:
             tel_ids = [
                 int(key[4:]) for key in f.root._v_children.keys()
@@ -188,3 +191,13 @@ def apply_flatfield(waveform, flatfield, selected_gain_channel):
     else:
         waveform *= flatfield.relative_gain_mean[
             selected_gain_channel, PIXEL_INDEX, np.newaxis]
+
+
+def remove_filters(f):
+    if 'FILTERS' in f.attrs:
+        print('Removing filters from', f)
+        del f.attrs['FILTERS']
+
+    if hasattr(f, 'values'):
+        for sub in f.values():
+            remove_filters(sub)
