@@ -2,7 +2,7 @@ channels:
   - conda-forge
   - default
 dependencies:
-  - astropy>=4.2
+  - astropy~=4.2
   - python=3.8 # nail the python version, so conda does not try upgrading / dowgrading
   - ctapipe=0.12
   - eventio
