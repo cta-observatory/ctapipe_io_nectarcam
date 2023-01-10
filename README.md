@@ -4,12 +4,12 @@ EventSource Plugin for ctapipe, able to read NectarCam zfits files
 and calibrate them to R1 as needed for ctapipe tools.
 
 To install into an existing environment, just do:
-```
+```shell
 pip install .
 ```
 
 For development, create a new environment and run the development install:
-```
+```shell
 conda env create -n nectar-dev -f environment.yml
 conda activate nectar-dev
 pip install -e .
