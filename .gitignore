@@ -78,6 +78,7 @@ distribute-*.tar.gz
 *.hdf5
 *.fits
 *.fits.gz
+*.fits.fz
 
 *.pstats
 target
