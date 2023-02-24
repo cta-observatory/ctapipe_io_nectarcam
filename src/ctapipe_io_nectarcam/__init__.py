@@ -24,6 +24,8 @@ from ctapipe.instrument import (
     CameraReadout,
     CameraGeometry,
     OpticsDescription,
+    SizeType,
+    ReflectorShape
 )
 from ctapipe.io import EventSource
 from enum import IntFlag, auto
@@ -86,10 +88,13 @@ OPTICS = OpticsDescription(
     # https://gitlab.cta-observatory.org/cta-science/simulations/simulation-model/verification/verification-process/mst-structure/-/blob/master/Appendix-MST-Structure.pdf
     # version from 20 Jan 2022
     'MST',
+    size_type=SizeType.MST,
     equivalent_focal_length=u.Quantity(16., u.m),
-    num_mirrors=1,
+    effective_focal_length=u.Quantity(16.44505,u.m), # from https://www.mpi-hd.mpg.de/hfm/CTA/MC/Prod5/Config/PSF/fov_prod4.pdf mentioned in the link above
+    n_mirrors=1,
     mirror_area=u.Quantity(106., u.m ** 2),  # no shadowing, uncertainty is 0.5 m2
-    num_mirror_tiles=86,  # Garczarczyk 2017
+    n_mirror_tiles=86,  # Garczarczyk 2017
+    reflector_shape=ReflectorShape.HYBRID #according to Dan Parsons
 )
 
 

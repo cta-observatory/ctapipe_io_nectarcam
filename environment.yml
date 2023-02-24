@@ -2,22 +2,23 @@ channels:
   - conda-forge
   - default
 dependencies:
-  - astropy~=4.2
-  - python=3.8 # nail the python version, so conda does not try upgrading / dowgrading
-  - ctapipe=0.12
-  - eventio
-  - corsikaio
-  - protozfits=2.0
+  - ctapipe
+  #- astropy~=4.2 # VIM : let the ctapipe version decide
+  #- python=3.8 # nail the python version, so conda does not try upgrading / dowgrading # VIM : let the ctapipe version decide
+  #- eventio
+  #- corsikaio
+  #- protozfits=2.0
   - zeromq
   - ipython
   - numba
-  - numpy=1.22 # higher versions >=1.23 don't work due to astropy4 dependency in ctapipe0.12
+  #- numpy=1.22 # higher versions >=1.23 don't work due to astropy4 dependency in ctapipe0.12 # VIM : let the ctapipe version decide
   - numpydoc
   - pytest
-  - pytables>=3.7
+  #- pytables>=3.7 # VIM : let the ctapipe version decide
   - pyyaml
   - zlib
   - pip
   - h5py
-  - pip:
-      - pytest_runner
+  - pytest-runner
+#  - pip:
+#      - pytest_runner
