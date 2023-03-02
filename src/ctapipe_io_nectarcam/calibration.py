@@ -1,7 +1,7 @@
 import numpy as np
 import tables
 from ctapipe.calib.camera.gainselection import ThresholdGainSelector
-from ctapipe.containers import MonitoringContainer
+from ctapipe.containers import MonitoringContainer, MonitoringCameraContainer, FlatFieldContainer, WaveformCalibrationContainer
 from ctapipe.core import TelescopeComponent
 from ctapipe.core.traits import (
     Path, FloatTelescopeParameter, Bool, Float
@@ -15,6 +15,7 @@ from .constants import (
 )
 from .containers import NectarCAMDataContainer
 
+import copy 
 __all__ = [
     'NectarCAMR0Corrections',
 ]
@@ -31,7 +32,7 @@ class NectarCAMR0Corrections(TelescopeComponent):
     calibration_path = Path(
         default_value=resource_filename(
             'ctapipe_io_nectarcam',
-            'resources/calibrationfile_run3255_pedrun3255_gainrun3155.hdf5'
+            'resources/calibrationfile_run3255_pedrun3255_gainrun3155_ctapipe018.hdf5'
         ),
         exists=True, directory_ok=False, allow_none=True,
         help='Path to calibration file',
@@ -105,6 +106,7 @@ class NectarCAMR0Corrections(TelescopeComponent):
             # subtract pedestal per sample and convert to pe
             if self.mon_data is not None:
                 calibration = self.mon_data.tel[tel_id].calibration
+                print(f'TOTOR> mon_data is available. dc_to_pe [{calibration.dc_to_pe}]')
                 # pedestal subtraction and gain correction
                 convert_to_pe(
                     waveform=r1.waveform,
@@ -151,6 +153,7 @@ class NectarCAMR0Corrections(TelescopeComponent):
         Read the correction from hdf5 calibration file
         Only calibration and flatfield containers are filled
         """
+
         mon = MonitoringContainer()
 
         with tables.open_file(path) as f:
@@ -161,14 +164,16 @@ class NectarCAMR0Corrections(TelescopeComponent):
 
         for tel_id in tel_ids:
             with HDF5TableReader(path) as h5_table:
-                base = f'/tel_{tel_id}'
-                # read the calibration data
-                table = base + '/calibration'
-                next(h5_table.read(table, mon.tel[tel_id].calibration))
 
-                # read flat-field data
-                table = base + '/flatfield'
-                next(h5_table.read(table, mon.tel[tel_id].flatfield))
+                mon.tel[tel_id] = MonitoringCameraContainer(
+                    calibration=next(h5_table.read(f'/tel_{tel_id}/calibration', WaveformCalibrationContainer)),
+                    #pedestal=next(h5_table.read(f'/{base}/pedestal', PedestalContainer)),
+                    flatfield=next(h5_table.read(f'/tel_{tel_id}/flatfield', FlatFieldContainer)),
+                    #pixel_status=next(h5_table.read(f"/{base}/pixel_status", PixelStatusContainer)),
+                )
+                # mon.tel[tel_id].calibration = next(h5_table.read(f'/tel_{tel_id}/calibration', WaveformCalibrationContainer))
+                # print(f'TOTOR> {mon.tel[tel_id].calibration}')
+                # mon.tel[tel_id].flatfield = next(h5_table.read(f'/tel_{tel_id}/flatfield', FlatFieldContainer))
 
         return mon
 

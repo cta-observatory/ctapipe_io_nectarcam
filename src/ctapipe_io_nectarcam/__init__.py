@@ -13,6 +13,7 @@ from astropy.io import fits
 from astropy.time import Time
 from ctapipe.containers import (
     PixelStatusContainer, EventType, R0CameraContainer, R1CameraContainer,
+    CoordinateFrameType, PointingMode, SchedulingBlockContainer, ObservationBlockContainer, # VIM : line of things in lst equivalent
 )
 from ctapipe.coordinates import CameraFrame
 from ctapipe.core import Provenance
@@ -27,7 +28,8 @@ from ctapipe.instrument import (
     SizeType,
     ReflectorShape
 )
-from ctapipe.io import EventSource
+
+from ctapipe.io import EventSource, DataLevel
 from enum import IntFlag, auto
 from pkg_resources import resource_filename
 
@@ -47,7 +49,6 @@ from .version import __version__
 __all__ = ['NectarCAMEventSource', '__version__']
 
 S_TO_NS = np.uint64(1e9)
-
 
 class TriggerBits(IntFlag):
     '''
@@ -215,14 +216,45 @@ class NectarCAMEventSource(EventSource):
         self.multi_file = MultiFiles(self.file_list)
         self.camera_config = self.multi_file.camera_config
         self.log.info("Read {} input files".format(self.multi_file.num_inputs()))
-        self._tel_id = self.camera_config.telescope_id
+        self.run_id = self.camera_config.configuration_id
+        self.tel_id = self.camera_config.telescope_id #VIM : Change the _tel_id to tel_id to be consistent with lst
+        self.run_start = Time(self.camera_config.date, format='unix')
         self.geometry_version = 3
-        self._subarray = self.create_subarray(self.geometry_version, self._tel_id)
+        self._subarray = self.create_subarray(self.geometry_version, self.tel_id)
         self.r0_r1_calibrator = NectarCAMR0Corrections(
             subarray=self._subarray, parent=self
         )
-        self.nectarcam_service = self.fill_nectarcam_service_container_from_zfile(self._tel_id,
+        self.nectarcam_service = self.fill_nectarcam_service_container_from_zfile(self.tel_id,
                                                                                   self.camera_config)
+
+        target_info = {}
+        pointing_mode = PointingMode.UNKNOWN # to be filled
+        #if self.pointing_information:
+        #    target = self.pointing_source.get_target(tel_id=self.tel_id, time=self.run_start)
+        #    if target is not None:
+        #        target_info["subarray_pointing_lon"] = target["ra"]
+        #        target_info["subarray_pointing_lat"] = target["dec"]
+        #        target_info["subarray_pointing_frame"] = CoordinateFrameType.ICRS
+        #        pointing_mode = PointingMode.TRACK
+
+        self._scheduling_blocks = {
+            self.run_id: SchedulingBlockContainer(
+                sb_id=np.uint64(self.run_id),
+                producer_id=f"MST-{self.tel_id}",
+                pointing_mode=pointing_mode,
+            )
+        }
+
+        self._observation_blocks = {
+            self.run_id: ObservationBlockContainer(
+                obs_id=np.uint64(self.run_id),
+                sb_id=np.uint64(self.run_id),
+                producer_id=f"MST-{self.tel_id}",
+                actual_start_time=self.run_start,
+                **target_info
+            )
+        }
+
 
     @property
     def is_simulation(self):
@@ -254,16 +286,19 @@ class NectarCAMEventSource(EventSource):
         daq_time_per_sample, pulse_shape_time_step, pulse_shapes = read_pulse_shapes()
 
         camera_readout = CameraReadout(
-            'NectarCam',
-            1 / daq_time_per_sample,
-            pulse_shapes,
-            pulse_shape_time_step,
+            name = 'NectarCam',
+            n_pixels=N_PIXELS,
+            n_channels=N_GAINS,
+            n_samples=N_SAMPLES,
+            sampling_rate = (1 / daq_time_per_sample).to(u.GHz),
+            reference_pulse_shape = pulse_shapes,
+            reference_pulse_sample_width = pulse_shape_time_step,
         )
 
         camera = CameraDescription('NectarCam', camera_geom, camera_readout)
 
         mst_tel_descr = TelescopeDescription(
-            name='NectarCam', tel_type='MST', optics=OPTICS, camera=camera
+            name='NectarCam', optics=OPTICS, camera=camera
         )
 
         tel_descriptions = {tel_id: mst_tel_descr}
@@ -279,6 +314,15 @@ class NectarCAMEventSource(EventSource):
 
         return subarray
 
+
+    @property
+    def observation_blocks(self):
+        return self._observation_blocks
+
+    @property
+    def scheduling_blocks(self):
+        return self._scheduling_blocks
+
     @property
     def obs_ids(self):
         # currently no obs id is available from the input files
@@ -293,7 +337,7 @@ class NectarCAMEventSource(EventSource):
         array_event.meta['origin'] = 'NectarCAM'
 
         # also add service container to the event section
-        array_event.nectarcam.tel[self._tel_id].svc = self.nectarcam_service
+        array_event.nectarcam.tel[self.tel_id].svc = self.nectarcam_service
 
         # initialize general monitoring container
         self.initialize_mon_container(array_event)
@@ -383,7 +427,7 @@ class NectarCAMEventSource(EventSource):
 
     def fill_nectarcam_event_container_from_zfile(self, array_event, event):
 
-        tel_id = self._tel_id
+        tel_id = self.tel_id
         event_container = NectarCAMEventContainer()
         array_event.nectarcam.tel[tel_id].evt = event_container
 
@@ -434,7 +478,7 @@ class NectarCAMEventSource(EventSource):
         self.unpack_feb_data(event_container, event)
 
     def fill_trigger_info(self, array_event):
-        tel_id = self._tel_id
+        tel_id = self.tel_id
 
         nectarcam = array_event.nectarcam.tel[tel_id]
         tib_available = nectarcam.evt.extdevices_presence & 1
@@ -624,8 +668,8 @@ class NectarCAMEventSource(EventSource):
         Fill with R0Container
         """
         r0, r1 = self.fill_r0r1_camera_container(zfits_event)
-        array_event.r0.tel[self._tel_id] = r0
-        array_event.r1.tel[self._tel_id] = r1
+        array_event.r0.tel[self.tel_id] = r0
+        array_event.r1.tel[self.tel_id] = r1
 
     def initialize_mon_container(self, array_event):
         """
@@ -634,7 +678,7 @@ class NectarCAMEventSource(EventSource):
 
         """
         container = array_event.mon
-        mon_camera_container = container.tel[self._tel_id]
+        mon_camera_container = container.tel[self.tel_id]
 
         # initialize the container
         status_container = PixelStatusContainer()
@@ -653,7 +697,7 @@ class NectarCAMEventSource(EventSource):
 
         """
 
-        status_container = array_event.mon.tel[self._tel_id].pixel_status
+        status_container = array_event.mon.tel[self.tel_id].pixel_status
 
         # reorder the array
         pixel_status = np.zeros(N_PIXELS)
