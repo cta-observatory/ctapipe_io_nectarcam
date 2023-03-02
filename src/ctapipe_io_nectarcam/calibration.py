@@ -106,7 +106,6 @@ class NectarCAMR0Corrections(TelescopeComponent):
             # subtract pedestal per sample and convert to pe
             if self.mon_data is not None:
                 calibration = self.mon_data.tel[tel_id].calibration
-                print(f'TOTOR> mon_data is available. dc_to_pe [{calibration.dc_to_pe}]')
                 # pedestal subtraction and gain correction
                 convert_to_pe(
                     waveform=r1.waveform,
@@ -167,13 +166,10 @@ class NectarCAMR0Corrections(TelescopeComponent):
 
                 mon.tel[tel_id] = MonitoringCameraContainer(
                     calibration=next(h5_table.read(f'/tel_{tel_id}/calibration', WaveformCalibrationContainer)),
-                    #pedestal=next(h5_table.read(f'/{base}/pedestal', PedestalContainer)),
                     flatfield=next(h5_table.read(f'/tel_{tel_id}/flatfield', FlatFieldContainer)),
+                    #pedestal=next(h5_table.read(f'/{base}/pedestal', PedestalContainer)),
                     #pixel_status=next(h5_table.read(f"/{base}/pixel_status", PixelStatusContainer)),
                 )
-                # mon.tel[tel_id].calibration = next(h5_table.read(f'/tel_{tel_id}/calibration', WaveformCalibrationContainer))
-                # print(f'TOTOR> {mon.tel[tel_id].calibration}')
-                # mon.tel[tel_id].flatfield = next(h5_table.read(f'/tel_{tel_id}/flatfield', FlatFieldContainer))
 
         return mon
 
