@@ -209,6 +209,16 @@ class NectarCAMEventSource(EventSource):
             self.file_list.sort()
             kwargs['input_url'] = self.file_list[0]
             super().__init__(**kwargs)
+        elif 'input_filelist' in kwargs.keys():
+            input_filelist = kwargs['input_filelist']
+            if isinstance(input_filelist,str):
+                self.file_list = [input_filelist]
+            else:
+                self.file_list = list(input_filelist)
+            self.file_list.sort()
+            kwargs['input_url'] = self.file_list[0]
+            del kwargs['input_filelist']
+            super().__init__(**kwargs)
         else:
             super().__init__(**kwargs)
             self.file_list = [self.input_url]
@@ -222,8 +232,8 @@ class NectarCAMEventSource(EventSource):
         self.geometry_version = 3
         self._subarray = self.create_subarray(self.geometry_version, self.tel_id)
         self.r0_r1_calibrator = NectarCAMR0Corrections(
-            subarray=self._subarray, parent=self
-        )
+             subarray=self._subarray, parent=self
+         )
         self.nectarcam_service = self.fill_nectarcam_service_container_from_zfile(self.tel_id,
                                                                                   self.camera_config)
 
