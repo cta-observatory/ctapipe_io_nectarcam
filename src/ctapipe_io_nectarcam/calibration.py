@@ -15,7 +15,6 @@ from .constants import (
 )
 from .containers import NectarCAMDataContainer
 
-import copy 
 __all__ = [
     'NectarCAMR0Corrections',
 ]

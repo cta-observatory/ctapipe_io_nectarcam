@@ -241,7 +241,7 @@ class NectarCAMEventSource(EventSource):
 
         # VIM : Put some pointing info to be filled as a reminder that it should be done at some point
         #self.pointing_source = PointingSource(subarray=self.subarray, parent=self)
-        pointing_mode = PointingMode.UNKNOWN 
+        pointing_mode = PointingMode.UNKNOWN
         #if self.pointing_information:
         #    target = self.pointing_source.get_target(tel_id=self.tel_id, time=self.run_start)
         #    if target is not None:
@@ -276,7 +276,7 @@ class NectarCAMEventSource(EventSource):
 
     def __len__(self):
         return self.get_entries()
-    
+
     @property
     def is_simulation(self):
         return False
