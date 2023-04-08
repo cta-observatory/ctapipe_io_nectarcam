@@ -7,7 +7,7 @@ dependencies:
   #- python=3.8 # nail the python version, so conda does not try upgrading / dowgrading # VIM : let the ctapipe version decide
   #- eventio
   #- corsikaio
-  #- protozfits=2.0
+  - protozfits
   - zeromq
   - ipython
   - numba
