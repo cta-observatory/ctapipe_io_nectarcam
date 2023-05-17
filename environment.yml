@@ -2,7 +2,7 @@ channels:
   - conda-forge
   - default
 dependencies:
-  - ctapipe
+  - ctapipe~=0.19
   #- astropy~=4.2 # VIM : let the ctapipe version decide
   #- python=3.8 # nail the python version, so conda does not try upgrading / dowgrading # VIM : let the ctapipe version decide
   #- eventio
