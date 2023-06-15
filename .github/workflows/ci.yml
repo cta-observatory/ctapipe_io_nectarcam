@@ -19,7 +19,7 @@ jobs:
     strategy:
       matrix:
         python-version: [3.9]
-        ctapipe-version: [v0.19]
+        ctapipe-version: [v0.19.2]
 
     defaults:
       run:
