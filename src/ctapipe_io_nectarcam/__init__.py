@@ -92,6 +92,120 @@ OPTICS = OpticsDescription(
     num_mirror_tiles=86,  # Garczarczyk 2017
 )
 
+def module_central(geometry):
+    '''
+    Input:
+        camera geometry  
+            e.g. `source.subarray.tel[10].camera.geometry`
+    Returns:
+        pix_mid_module
+            list of pixels at the centre of each module (sorted)
+        
+    Requires the geometry to have pixel_x and pixel_y, and to have 7-pixel modules.
+    Neighbours gets lazy-loaded by the main ctapipe function in camera.geometry.
+    
+    Find central pixels of all the modules
+    Finds the most distant PMT and then the central pixel there beside it (pixel which has 6 neighbours), 
+      then elimates that module and repeats, until no modules left.
+
+    '''
+    
+    import numpy as np
+    
+    # Bug out right away if the number of pixels is not divisible by 7 (for 7-pixel modules)
+    if geometry.n_pixels%7 != 0:
+        raise ValueError("n_pixels is not divisible by 7, so not full 7-pixel modules. \n"+
+            "... Incompatible with expected NectarCAM geometry.")
+    
+    pix_mid_module = []
+    
+    pixel_dist = np.hypot(geometry.pix_x,geometry.pix_x).value
+
+    from copy import copy,deepcopy
+    # Make a dictionary by pixel index, so that pixels can be deleted later
+    pixel_dist_dict = dict(zip(range(geometry.n_pixels),pixel_dist))
+    
+    # geometry.neighbours gets lazy-loaded by the main ctapipe function in camera.geometry
+    pixel_nbrs_dict = dict(zip(range(geometry.n_pixels),deepcopy(geometry.neighbors)))
+
+    while len(pixel_dist_dict)>0:
+
+        # Find the farthest pixel which still has 6 neighbours
+        
+        # This holds the index within the dictionary
+        pixdist_order = np.argsort(list(pixel_dist_dict.values()))
+
+        for pix_idx in pixdist_order[::-1]: # Go backwards
+            pix_key = list(pixel_dist_dict.keys())[pix_idx]
+            if len(pixel_nbrs_dict[pix_key]) == 6:
+                break
+        pix_cent = pix_key
+        
+        #print("vvvvvvvvvvvvvvvvvvvvvvvvvvv",len(pixel_dist_dict))
+        #print("Drawer centre is :",pix_cent)
+        pix_mid_module.append(pix_cent)
+        
+        module = [pix_cent] + pixel_nbrs_dict[pix_key]
+        #print(f"Module: {module}")
+
+        # remove all the current module pixels from the neighbours list values
+        for pix_key in module:
+            #print(pix_key)
+            for nbr_key in pixel_nbrs_dict:
+                if pix_key in pixel_nbrs_dict[nbr_key]:
+                    #print(f"removing {pix_key} from {nbr_key}, {pixel_nbrs_dict[nbr_key]}")
+                    pixel_nbrs_dict[nbr_key].remove(pix_key)
+
+        # remove the current module pixels from the neighbours dictionary itself
+        for pix_key in module:
+            if pix_key in pixel_nbrs_dict:
+                pixel_nbrs_dict.pop(pix_key)
+        # remove the current module pixels from the distance dictionary
+        for pix_key in module:
+            if pix_key in pixel_dist_dict:
+                pixel_dist_dict.pop(pix_key)
+                
+    # Just for tidiness
+    pix_mid_module.sort()
+        
+    return pix_mid_module
+
+
+def nectar_trigger_patches(geometry,pix_mid_module):
+    '''
+    Input:
+        camera geometry  
+            e.g. `source.subarray.tel[10].camera.geometry`
+        pix_mid_module
+            list of pixels at the centre of the modules (from `module_central` routine)
+    Returns:
+        trigger_patches
+            list of trigger_patches, each consisting of a list of pixels in that patch
+        
+    Requires the neighbors, and to have 7-pixel modules.
+    '''
+    
+    trigger_patches = []
+    
+    from copy import copy
+    
+    for patch_pix in pix_mid_module:
+        trigger_patch = patch_pix
+        # Use a set to avoid repeating pixels
+        trigger_patch = set([patch_pix]+geometry.neighbors[patch_pix])
+        for nbrs in geometry.neighbors[patch_pix]:
+            trigger_patch |= set(geometry.neighbors[nbrs])
+        for nbrs in copy(trigger_patch):
+            trigger_patch |= set(geometry.neighbors[nbrs])
+        trigger_patch = list(trigger_patch)
+        #type(trigger_patch),trigger_patch,len(trigger_patch)
+                
+        # Just for tidiness
+        trigger_patch.sort()
+        trigger_patches.append(trigger_patch)
+        
+    return trigger_patches
+
 
 def load_camera_geometry(version=3):
     ''' Load camera geometry from bundled resources of this repo '''
@@ -101,6 +215,34 @@ def load_camera_geometry(version=3):
     Provenance().add_input_file(f, role="CameraGeometry")
     geom = CameraGeometry.from_table(f)
     geom.frame = CameraFrame(focal_length=OPTICS.equivalent_focal_length)
+
+    # Add the trigger patches as an attribute on-the-fly for now.
+    
+    # Find central pixels of all the modules
+    # Assumes that the camera has 7-pixel modules, 
+    #  finds the most distant PMT and so the central pixel there, elimates that module and repeats.
+    # This will lazy-load the neighbours from ctapipe.geometry, which it uses.
+    pix_mid_module = module_central(geom)
+    geom.pix_mid_module = pix_mid_module
+    # Get a list of trigger patches, with the PMTs in each patch (up to 37 = 7 + 6*5, but fewer at edges)
+    trigger_patches = nectar_trigger_patches(geom,pix_mid_module)
+    geom.trigger_patches = trigger_patches
+    
+    # Using a mask can be faster (tested with %%timeit), so calculate it here
+
+    # Usage then is as follows:
+    # e.g. # sum(np.array(patch_mask) & np.array(mask_trig)) is the number of patches triggered
+    # > triggers = (np.sum(np.array(patch_masks) & np.array(mask_trig),axis=1))
+    # > patch_count = sum(triggers>2)
+    # # Where patch_count can be used to give the number of patches in trigger.
+                
+    patch_masks = []
+    for patch in trigger_patches:
+        patch_mask = np.array([False]*geom.n_pixels)
+        patch_mask[np.array(patch)] = True
+        patch_masks.append(patch_mask)
+        
+    geom.trigger_patches_mask = patch_masks
 
     return geom
 
