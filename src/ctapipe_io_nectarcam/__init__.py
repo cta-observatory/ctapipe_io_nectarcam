@@ -104,9 +104,11 @@ def module_central(geometry):
     Requires the geometry to have pixel_x and pixel_y, and to have 7-pixel modules.
     Neighbours gets lazy-loaded by the main ctapipe function in camera.geometry.
     
-    Find central pixels of all the modules
-    Finds the most distant PMT and then the central pixel there beside it (pixel which has 6 neighbours), 
-      then elimates that module and repeats, until no modules left.
+    Find central pixels of all the modules, as follows:
+
+    Finds the most distant PMT and which still has 6 neighbours, 
+      which must be the central pixel of a module.
+    Then elimates that module and repeats, until no modules left.
 
     '''
     
@@ -182,7 +184,8 @@ def nectar_trigger_patches(geometry,pix_mid_module):
         trigger_patches
             list of trigger_patches, each consisting of a list of pixels in that patch
         
-    Requires the neighbors, and to have 7-pixel modules.
+    Requires to have 7-pixel modules.
+    Neighbours gets lazy-loaded by the main ctapipe function in camera.geometry.
     '''
     
     trigger_patches = []
@@ -219,9 +222,6 @@ def load_camera_geometry(version=3):
     # Add the trigger patches as an attribute on-the-fly for now.
     
     # Find central pixels of all the modules
-    # Assumes that the camera has 7-pixel modules, 
-    #  finds the most distant PMT and so the central pixel there, elimates that module and repeats.
-    # This will lazy-load the neighbours from ctapipe.geometry, which it uses.
     pix_mid_module = module_central(geom)
     geom.pix_mid_module = pix_mid_module
     # Get a list of trigger patches, with the PMTs in each patch (up to 37 = 7 + 6*5, but fewer at edges)
