@@ -238,11 +238,7 @@ def test_trigger_patches_10modules_minus_7_central_pixels_ValueError():
     # In future, shouldn't need to do this.
     pix_area = np.array([np.pi*radius**2]*n_pix)*u.cm**2    
 
-<<<<<<< HEAD
     geom_new = CameraGeometry(camera_name,
-=======
-    geom_new = CameraGeometry(camedfra_name,
->>>>>>> refs/remotes/origin/Add_Trigger_Patches
                               pix_x=pix_x,pix_y=pix_y,
                               pix_id=table.column.Column(range(n_pix)),
                               pix_area=pix_area,
