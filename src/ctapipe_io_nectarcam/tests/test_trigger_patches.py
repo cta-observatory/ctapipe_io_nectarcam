@@ -12,6 +12,12 @@
 #     name: python3
 # ---
 
+# # DO NOT EDIT!
+# Instead edit the notebook in `ctapipe_io_nectarcam/notebooks/test_trigger_patches.ipynb` then create this file with
+# ```
+# jupytext ../../../notebooks/test_trigger_patches.ipynb -o ./test_trigger_patches.py
+# ```
+
 def make_new_cameras(camera_type=0,display=False):
     import numpy as np
     from matplotlib import pyplot as plt
@@ -119,10 +125,13 @@ def test_trigger_patches_simple_camera():
     pix_x=pixels[:,0]*u.cm
     pix_y=pixels[:,1]*u.cm
 
-    geom_new = CameraGeometry(camera_name=camera_name,
+    # In future, shouldn't need to do this.
+    pix_area = np.array([np.pi*radius**2]*n_pix)*u.cm**2    
+
+    geom_new = CameraGeometry(camera_name,
                               pix_x=pix_x,pix_y=pix_y,
                               pix_id=table.column.Column(range(n_pix)),
-                              pix_area=np.pi*(radius*u.cm)**2,
+                              pix_area=pix_area,
                               pix_type="hexagon")
     
     pix_mid_module = module_central(geom_new)
@@ -155,10 +164,13 @@ def test_trigger_patches_bigger_camera():
     pix_x=pixels[:,0]*u.cm
     pix_y=pixels[:,1]*u.cm
 
-    geom_new = CameraGeometry(camera_name=camera_name,
+    # In future, shouldn't need to do this.
+    pix_area = np.array([np.pi*radius**2]*n_pix)*u.cm**2    
+
+    geom_new = CameraGeometry(camera_name,
                               pix_x=pix_x,pix_y=pix_y,
                               pix_id=table.column.Column(range(n_pix)),
-                              pix_area=np.pi*(radius*u.cm)**2,
+                              pix_area=pix_area,
                               pix_type="hexagon")
     
     pix_mid_module = module_central(geom_new)
@@ -196,10 +208,13 @@ def test_trigger_patches_10modules_minus_3pixels_camera_ValueError():
     pix_x=pixels[:,0]*u.cm
     pix_y=pixels[:,1]*u.cm
 
-    geom_new = CameraGeometry(camera_name=camera_name,
+    # In future, shouldn't need to do this.
+    pix_area = np.array([np.pi*radius**2]*n_pix)*u.cm**2    
+
+    geom_new = CameraGeometry(camera_name,
                               pix_x=pix_x,pix_y=pix_y,
                               pix_id=table.column.Column(range(n_pix)),
-                              pix_area=np.pi*(radius*u.cm)**2,
+                              pix_area=pix_area,
                               pix_type="hexagon")
     
     with pytest.raises(Exception):
@@ -220,10 +235,13 @@ def test_trigger_patches_10modules_minus_7_central_pixels_ValueError():
     pix_x=pixels[:,0]*u.cm
     pix_y=pixels[:,1]*u.cm
 
-    geom_new = CameraGeometry(camera_name=camera_name,
+    # In future, shouldn't need to do this.
+    pix_area = np.array([np.pi*radius**2]*n_pix)*u.cm**2    
+
+    geom_new = CameraGeometry(camedfra_name,
                               pix_x=pix_x,pix_y=pix_y,
                               pix_id=table.column.Column(range(n_pix)),
-                              pix_area=np.pi*(radius*u.cm)**2,
+                              pix_area=pix_area,
                               pix_type="hexagon")
     
     with pytest.raises(Exception):
@@ -244,10 +262,13 @@ def test_trigger_patches_10modules_minus_7_edge_pixels_ValueError():
     pix_x=pixels[:,0]*u.cm
     pix_y=pixels[:,1]*u.cm
 
-    geom_new = CameraGeometry(camera_name=camera_name,
+    # In future, shouldn't need to do this.
+    pix_area = np.array([np.pi*radius**2]*n_pix)*u.cm**2    
+
+    geom_new = CameraGeometry(camera_name,
                               pix_x=pix_x,pix_y=pix_y,
                               pix_id=table.column.Column(range(n_pix)),
-                              pix_area=np.pi*(radius*u.cm)**2,
+                              pix_area=pix_area,
                               pix_type="hexagon")
     
     with pytest.raises(Exception):
@@ -270,29 +291,30 @@ if __name__ == "__main__":
     #geom = load_camera_geometry()
 
     new_camera_type = 0
-    new_camera_type = 4
+    new_camera_type = 1
     
     pixels,radius,new_camera_name = make_new_cameras(new_camera_type,False)
-
 
     n_pix = len(pixels)
     pix_x=pixels[:,0]*u.cm
     pix_y=pixels[:,1]*u.cm
     
     from ctapipe.instrument.camera.geometry import CameraGeometry
-    
-    geom_new = CameraGeometry(camera_name=new_camera_name,
+
+    # In future, shouldn't need to do this.
+    pix_area = np.array([np.pi*radius**2]*n_pix)*u.cm**2    
+   
+    geom_new = CameraGeometry(new_camera_name,
                               pix_x=pix_x,pix_y=pix_y,
                               pix_id=table.column.Column(range(n_pix)),
-                              pix_area=np.pi*(radius*u.cm)**2,
+                              pix_area=pix_area,
                               pix_type="hexagon")
     
     from ctapipe.visualization import CameraDisplay
     
-    print(geom_new.pixel_width)
-    
     # In future, shouldn't need to do this.
     geom_new.pixel_width = np.array([radius]*n_pix)*u.cm    
+    
     CameraDisplay(geom_new)
     
     
