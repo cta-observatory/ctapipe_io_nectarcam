@@ -98,6 +98,46 @@ OPTICS = OpticsDescription(
     reflector_shape=ReflectorShape.HYBRID #according to Dan Parsons
 )
 
+
+
+def nectar_trigger_patches(geometry,pix_mid_module):
+    '''
+    Input:
+        camera geometry  
+            e.g. `source.subarray.tel[10].camera.geometry`
+        pix_mid_module
+            list of pixels at the centre of the modules (from `module_central` routine)
+    Returns:
+        trigger_patches
+            list of trigger_patches, each consisting of a list of pixels in that patch
+        
+    Requires to have 7-pixel modules.
+    Neighbours gets lazy-loaded by the main ctapipe function in camera.geometry.
+    '''
+    
+    from copy import copy
+    from scipy import sparse    
+
+    trigger_patches = []    
+
+    for patch_pix in pix_mid_module:
+        trigger_patch = patch_pix
+        # Use a set to avoid repeating pixels
+        trigger_patch = set([patch_pix]+geometry.neighbors[patch_pix])
+        for nbrs in geometry.neighbors[patch_pix]:
+            trigger_patch |= set(geometry.neighbors[nbrs])
+        for nbrs in copy(trigger_patch):
+            trigger_patch |= set(geometry.neighbors[nbrs])
+        trigger_patch = list(trigger_patch)
+        #type(trigger_patch),trigger_patch,len(trigger_patch)
+                
+        # Just for tidiness
+        trigger_patch.sort()
+        trigger_patches.append(trigger_patch)
+    
+        
+    return trigger_patches
+
 def module_central(geometry):
     '''
     Input:
@@ -119,6 +159,7 @@ def module_central(geometry):
     '''
     
     import numpy as np
+    from copy import copy,deepcopy
     
     # Bug out right away if the number of pixels is not divisible by 7 (for 7-pixel modules)
     if geometry.n_pixels%7 != 0:
@@ -129,7 +170,6 @@ def module_central(geometry):
     
     pixel_dist = np.hypot(geometry.pix_x,geometry.pix_y).value
 
-    from copy import copy,deepcopy
     # Make a dictionary by pixel index, so that pixels can be deleted later
     pixel_dist_dict = dict(zip(range(geometry.n_pixels),pixel_dist))
     
@@ -180,48 +220,68 @@ def module_central(geometry):
     return pix_mid_module
 
 
-def nectar_trigger_patches(geometry,pix_mid_module):
-    '''
-    Input:
-        camera geometry  
-            e.g. `source.subarray.tel[10].camera.geometry`
-        pix_mid_module
-            list of pixels at the centre of the modules (from `module_central` routine)
-    Returns:
-        trigger_patches
-            list of trigger_patches, each consisting of a list of pixels in that patch
-        
-    Requires to have 7-pixel modules.
-    Neighbours gets lazy-loaded by the main ctapipe function in camera.geometry.
-    '''
-    
-    from copy import copy
-    from scipy import sparse    
+def find_central_pixels(cam: CameraGeometry):
+    # Max's version of the above
 
-    trigger_patches = []    
+    # Bug out right away if the number of pixels is not divisible by 7 (for 7-pixel modules)
+    if cam.n_pixels%7 != 0:
+        raise ValueError("n_pixels is not divisible by 7, so not full 7-pixel modules. \n"+
+                         " -> Incompatible with expected NectarCAM geometry.")
 
-    for patch_pix in pix_mid_module:
-        trigger_patch = patch_pix
-        # Use a set to avoid repeating pixels
-        trigger_patch = set([patch_pix]+geometry.neighbors[patch_pix])
-        for nbrs in geometry.neighbors[patch_pix]:
-            trigger_patch |= set(geometry.neighbors[nbrs])
-        for nbrs in copy(trigger_patch):
-            trigger_patch |= set(geometry.neighbors[nbrs])
-        trigger_patch = list(trigger_patch)
-        #type(trigger_patch),trigger_patch,len(trigger_patch)
-                
-        # Just for tidiness
-        trigger_patch.sort()
-        trigger_patches.append(trigger_patch)
-    
-        
-    return trigger_patches
+    # distance to the camera center
+    distance = np.hypot(cam.pix_x, cam.pix_y).to_value(cam.pix_x.unit)
 
+    # pixel indices sorted from farthest to closest to the center
+    order = np.argsort(distance)[::-1]
+
+    # While not all pixels are visited, do
+    # * Next pixel center is the furthest pixel from the center that has 6 neighbors
+    # * Remove that pixel and its neighbors from the calculation
+    central_pixel_ids = []
+
+    neighbors = cam.neighbor_matrix.copy()
+    n_neighbors = neighbors.sum(axis=0)
+    n_unassigned = cam.n_pixels
+
+    while n_unassigned > 0:
+        # Next pixel center is the furthest pixel from the center that has 6 neighbors
+        try:
+            center = order[(n_neighbors[order] == 6)][0]
+        except IndexError:
+            print(center)
+            raise IndexError("Search for module central pixels failed.\n"+
+                             " -> Probably incompatible with expected NectarCAM geometry")
+
+        central_pixel_ids.append(center)
+
+        # remove that pixel and the pixels that belong to this module, i.e. the neighbors
+        # of the central pixel, from the calculation
+        other = neighbors[center]
+        n_neighbors[center] -= 7
+        n_neighbors -= neighbors[other].sum(axis=0)
+
+        neighbors[:, center] = False
+        neighbors[center, :] = False
+        neighbors[:, other] = False
+        neighbors[other, :] = False
+
+        n_unassigned -= 7
+
+    # Bug out right away if the number of central pixels is not == n_pixels/7 (for 7-pixel modules)
+    if len(central_pixel_ids) != cam.n_pixels/7:
+        raise ValueError("Number of module central pixels != n_pixels/7. \n"+
+                         " -> Incompatible with expected NectarCAM geometry.")
+
+    central_pixel_ids = np.array(central_pixel_ids)
+    central_pixel_ids.sort()
+
+    return central_pixel_ids
 
 def load_camera_geometry(version=3):
     ''' Load camera geometry from bundled resources of this repo,
          and find central pixels of the modules and trigger patches.'''
+         
+    from ctapipe_io_nectarcam import nectar_trigger_patches,find_central_pixels
     from scipy.sparse import csr_matrix, lil_matrix
     
     f = resource_filename(
@@ -234,7 +294,7 @@ def load_camera_geometry(version=3):
     # Add the trigger patches as an attribute on-the-fly for now.
     
     # Find central pixels of all the modules
-    pix_mid_module = module_central(geom)
+    pix_mid_module = find_central_pixels(geom)
     geom.pix_mid_module = pix_mid_module
     # Get a list of trigger patches, with the PMTs in each patch (up to 37 = 7 + 6*5, but fewer at edges)
     trigger_patches = nectar_trigger_patches(geom,pix_mid_module)
