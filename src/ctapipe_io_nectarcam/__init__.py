@@ -121,7 +121,7 @@ def module_central(geometry):
     
     pix_mid_module = []
     
-    pixel_dist = np.hypot(geometry.pix_x,geometry.pix_x).value
+    pixel_dist = np.hypot(geometry.pix_x,geometry.pix_y).value
 
     from copy import copy,deepcopy
     # Make a dictionary by pixel index, so that pixels can be deleted later
@@ -143,29 +143,30 @@ def module_central(geometry):
                 break
         pix_cent = pix_key
         
-        #print("vvvvvvvvvvvvvvvvvvvvvvvvvvv",len(pixel_dist_dict))
-        #print("Drawer centre is :",pix_cent)
         pix_mid_module.append(pix_cent)
         
         module = [pix_cent] + pixel_nbrs_dict[pix_key]
-        #print(f"Module: {module}")
-
-        # remove all the current module pixels from the neighbours list values
+        
         for pix_key in module:
-            #print(pix_key)
+            
+            # remove all the current module pixels from the neighbours list values
             for nbr_key in pixel_nbrs_dict:
                 if pix_key in pixel_nbrs_dict[nbr_key]:
-                    #print(f"removing {pix_key} from {nbr_key}, {pixel_nbrs_dict[nbr_key]}")
                     pixel_nbrs_dict[nbr_key].remove(pix_key)
 
-        # remove the current module pixels from the neighbours dictionary itself
-        for pix_key in module:
+            # remove the current module pixels from the neighbours dictionary itself
             if pix_key in pixel_nbrs_dict:
                 pixel_nbrs_dict.pop(pix_key)
-        # remove the current module pixels from the distance dictionary
-        for pix_key in module:
+            
+            # remove the current module pixels from the distance dictionary
             if pix_key in pixel_dist_dict:
                 pixel_dist_dict.pop(pix_key)
+                
+    # Bug out right away if the number of central pixels is not == n_pixels/7 (for 7-pixel modules)
+    if len(pix_mid_module) != geometry.n_pixels/7:
+        raise ValueError("Number of module central pixels != n_pixels/7. \n"+
+            "... Incompatible with expected NectarCAM geometry.")
+
                 
     # Just for tidiness
     pix_mid_module.sort()
@@ -188,10 +189,11 @@ def nectar_trigger_patches(geometry,pix_mid_module):
     Neighbours gets lazy-loaded by the main ctapipe function in camera.geometry.
     '''
     
-    trigger_patches = []
-    
     from copy import copy
-    
+    from scipy import sparse    
+
+    trigger_patches = []    
+
     for patch_pix in pix_mid_module:
         trigger_patch = patch_pix
         # Use a set to avoid repeating pixels
@@ -206,12 +208,16 @@ def nectar_trigger_patches(geometry,pix_mid_module):
         # Just for tidiness
         trigger_patch.sort()
         trigger_patches.append(trigger_patch)
+    
         
     return trigger_patches
 
 
 def load_camera_geometry(version=3):
-    ''' Load camera geometry from bundled resources of this repo '''
+    ''' Load camera geometry from bundled resources of this repo,
+         and find central pixels of the modules and trigger patches.'''
+    from scipy.sparse import csr_matrix, lil_matrix
+    
     f = resource_filename(
         'ctapipe_io_nectarcam', f'resources/NectarCam-{version:03d}.camgeom.fits.gz'
     )
@@ -231,19 +237,27 @@ def load_camera_geometry(version=3):
     # Using a mask can be faster (tested with %%timeit), so calculate it here
 
     # Usage then is as follows:
-    # e.g. # sum(np.array(patch_mask) & np.array(mask_trig)) is the number of patches triggered
+    # e.g. # sum(np.array(patch_masks) & np.array(mask_trig)) is the number of patches triggered
     # > triggers = (np.sum(np.array(patch_masks) & np.array(mask_trig),axis=1))
     # > patch_count = sum(triggers>2)
-    # # Where patch_count can be used to give the number of patches in trigger.
+    # # Where patch_count is the number of patches in triggered.
                 
     patch_masks = []
     for patch in trigger_patches:
         patch_mask = np.array([False]*geom.n_pixels)
         patch_mask[np.array(patch)] = True
-        patch_masks.append(patch_mask)
-        
+        patch_masks.append(patch_mask)        
     geom.trigger_patches_mask = patch_masks
-
+    
+    # Max suggestion to use sparse array
+    # Usage as above, but need to convert from sparse array to array with patch_masks_sparse.toarray()
+    # ... and then it is 4 times slower than using just the boolean mask array
+    lil = lil_matrix((geom.n_pixels, geom.n_pixels), dtype=bool)
+    for pix_id, patches in enumerate(trigger_patches):
+        lil[pix_id, patches] = True
+    patch_masks_sparse = lil.tocsr()
+    geom.trigger_patches_mask_sparse = patch_masks_sparse
+    
     return geom
 
 
