@@ -219,8 +219,25 @@ def module_central(geometry):
         
     return pix_mid_module
 
-
 def find_central_pixels(cam: CameraGeometry):
+    '''
+    Input:
+        camera geometry  
+            e.g. `source.subarray.tel[10].camera.geometry`
+    Returns:
+        central_pixel_ids
+            list of pixels at the centre of each module (sorted)
+        
+    Requires the geometry to have pixel_x and pixel_y, and to have 7-pixel modules.
+    Neighbours gets lazy-loaded by the main ctapipe function in camera.geometry.
+    
+    Find central pixels of all the modules, as follows:
+
+    Finds the most distant PMT and which still has 6 neighbours, 
+      which must be the central pixel of a module.
+    Then elimates that module and repeats, until no modules left.
+
+    '''
     # Max's version of the above
 
     # Bug out right away if the number of pixels is not divisible by 7 (for 7-pixel modules)
@@ -277,28 +294,28 @@ def find_central_pixels(cam: CameraGeometry):
 
     return central_pixel_ids
 
-def load_camera_geometry(version=3):
-    ''' Load camera geometry from bundled resources of this repo,
-         and find central pixels of the modules and trigger patches.'''
-         
-    from ctapipe_io_nectarcam import nectar_trigger_patches,find_central_pixels
+def add_nectar_trigger_patches_to_geom(cam: CameraGeometry):
+    '''
+        Does what it says on the tin
+        Adds the trigger patches as an attribute on-the-fly for now.
+            Input:
+        camera geometry  
+            e.g. `source.subarray.tel[10].camera.geometry`
+        Returns:
+            No return, just "cam" gets modified with added: 
+            * pix_mid_module: list of pixel IDs
+            * trigger_patches: list of list of pixel IDs
+            * trigger_patches_mask: list of list of boolean masks (n_pixels x n_pixels)
+            * trigger_patches_mask_sparse: sparse array of trigger_patches
+    '''
     from scipy.sparse import csr_matrix, lil_matrix
     
-    f = resource_filename(
-        'ctapipe_io_nectarcam', f'resources/NectarCam-{version:03d}.camgeom.fits.gz'
-    )
-    Provenance().add_input_file(f, role="CameraGeometry")
-    geom = CameraGeometry.from_table(f)
-    geom.frame = CameraFrame(focal_length=OPTICS.equivalent_focal_length)
-
-    # Add the trigger patches as an attribute on-the-fly for now.
-    
     # Find central pixels of all the modules
-    pix_mid_module = find_central_pixels(geom)
-    geom.pix_mid_module = pix_mid_module
+    pix_mid_module = find_central_pixels(cam)
+    cam.pix_mid_module = pix_mid_module
     # Get a list of trigger patches, with the PMTs in each patch (up to 37 = 7 + 6*5, but fewer at edges)
-    trigger_patches = nectar_trigger_patches(geom,pix_mid_module)
-    geom.trigger_patches = trigger_patches
+    trigger_patches = nectar_trigger_patches(cam,pix_mid_module)
+    cam.trigger_patches = trigger_patches
     
     # Using a mask can be faster (tested with %%timeit), so calculate it here
 
@@ -310,19 +327,37 @@ def load_camera_geometry(version=3):
                 
     patch_masks = []
     for patch in trigger_patches:
-        patch_mask = np.array([False]*geom.n_pixels)
+        patch_mask = np.array([False]*cam.n_pixels)
         patch_mask[np.array(patch)] = True
         patch_masks.append(patch_mask)        
-    geom.trigger_patches_mask = patch_masks
+    cam.trigger_patches_mask = patch_masks
     
     # Max suggestion to use sparse array
     # Usage as above, but need to convert from sparse array to array with patch_masks_sparse.toarray()
     # ... and then it is 4 times slower than using just the boolean mask array
-    lil = lil_matrix((geom.n_pixels, geom.n_pixels), dtype=bool)
+    lil = lil_matrix((cam.n_pixels, cam.n_pixels), dtype=bool)
     for pix_id, patches in enumerate(trigger_patches):
         lil[pix_id, patches] = True
     patch_masks_sparse = lil.tocsr()
-    geom.trigger_patches_mask_sparse = patch_masks_sparse
+    cam.trigger_patches_mask_sparse = patch_masks_sparse
+    
+    return
+
+def load_camera_geometry(version=3):
+    ''' Load camera geometry from bundled resources of this repo,
+         and find central pixels of the modules and trigger patches.'''
+         
+    #from ctapipe_io_nectarcam import nectar_trigger_patches,find_central_pixels
+    
+    f = resource_filename(
+        'ctapipe_io_nectarcam', f'resources/NectarCam-{version:03d}.camgeom.fits.gz'
+    )
+    Provenance().add_input_file(f, role="CameraGeometry")
+    geom = CameraGeometry.from_table(f)
+    geom.frame = CameraFrame(focal_length=OPTICS.equivalent_focal_length)
+
+    # Add the trigger patches as an attribute on-the-fly for now.
+    add_nectar_trigger_patches_to_geom(geom)    
     
     return geom
 
