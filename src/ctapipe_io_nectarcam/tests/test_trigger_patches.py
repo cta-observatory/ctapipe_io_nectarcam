@@ -111,75 +111,19 @@ def make_new_cameras(camera_type=0,display=False):
     # Now do the case for other types
     return pixels,radius,"Final example camera"
 
-
-def test_trigger_patches_simple_camera():
-    import numpy as np
-    from astropy import units as u
-    from astropy import table
-    from ctapipe_io_nectarcam import module_central,nectar_trigger_patches
-    from ctapipe.instrument.camera.geometry import CameraGeometry
-    
-    pixels,radius,camera_name = make_new_cameras(0,False)
-
-    n_pix = len(pixels)
-    pix_x=pixels[:,0]*u.cm
-    pix_y=pixels[:,1]*u.cm
-
-    # In future, shouldn't need to do this.
-    pix_area = np.array([np.pi*radius**2]*n_pix)*u.cm**2    
-
-    geom_new = CameraGeometry(camera_name,
-                              pix_x=pix_x,pix_y=pix_y,
-                              pix_id=table.column.Column(range(n_pix)),
-                              pix_area=pix_area,
-                              pix_type="hexagon")
-    
-    pix_mid_module = module_central(geom_new)
-    assert pix_mid_module == [3, 10, 17, 24, 31, 38, 45]
-
-    trigger_patches = nectar_trigger_patches(geom_new,
-                                             pix_mid_module)
-
-    assert trigger_patches == [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 17, 18, 21, 22, 24, 
+import pytest
+testdata = [
+    (0,[3, 10, 17, 24, 31, 38, 45],
+     [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 17, 18, 21, 22, 24, 
                                 25, 27, 29, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 44, 45, 47, 48], 
                                [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 20, 44, 45, 46, 47, 48], 
                                [2, 3, 4, 5, 6, 7, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 24, 25, 26, 27], 
                                [0, 2, 3, 5, 6, 14, 15, 16, 17, 19, 21, 22, 23, 24, 25, 26, 27, 30, 31, 32, 33, 34], 
                                [0, 1, 2, 3, 5, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 40, 41], 
                                [0, 1, 2, 3, 4, 28, 29, 31, 32, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 47], 
-                               [0, 1, 3, 4, 6, 7, 8, 9, 10, 11, 36, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48]]
-
-
-
-def test_trigger_patches_bigger_camera():
-    import numpy as np
-    from astropy import units as u
-    from astropy import table
-    from ctapipe_io_nectarcam import module_central,nectar_trigger_patches
-    from ctapipe.instrument.camera.geometry import CameraGeometry
-    
-    pixels,radius,camera_name = make_new_cameras(1,False)
-
-    n_pix = len(pixels)
-    pix_x=pixels[:,0]*u.cm
-    pix_y=pixels[:,1]*u.cm
-
-    # In future, shouldn't need to do this.
-    pix_area = np.array([np.pi*radius**2]*n_pix)*u.cm**2    
-
-    geom_new = CameraGeometry(camera_name,
-                              pix_x=pix_x,pix_y=pix_y,
-                              pix_id=table.column.Column(range(n_pix)),
-                              pix_area=pix_area,
-                              pix_type="hexagon")
-    
-    pix_mid_module = module_central(geom_new)
-    assert pix_mid_module ==  [3, 10, 17, 24, 31, 38, 45, 52, 59, 66]
-
-    trigger_patches = nectar_trigger_patches(geom_new,
-                                             pix_mid_module)
-
-    assert trigger_patches == [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 17, 18, 21, 22, 24, 
+                               [0, 1, 3, 4, 6, 7, 8, 9, 10, 11, 36, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48]]),
+    (1,[3, 10, 17, 24, 31, 38, 45, 52, 59, 66],
+     [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 17, 18, 21, 22, 24, 
                                 25, 27,29, 31, 32, 33, 34, 37, 38, 39, 40, 41, 42, 44, 45, 47, 48], 
                                [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 20, 44, 45, 
                                 46, 47, 48, 49, 51, 52, 54, 55, 56, 57, 58, 59, 61, 63, 64, 65, 66, 67], 
@@ -190,46 +134,21 @@ def test_trigger_patches_bigger_camera():
                                [0, 1, 3, 4, 6, 7, 8, 9, 10, 11, 36, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 54], 
                                [7, 8, 10, 11, 13, 43, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60], 
                                [8, 10, 11, 12, 13, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 66, 67, 69], 
-                               [9, 10, 11, 12, 13, 15, 17, 18, 19, 20, 56, 58, 59, 61, 62, 63, 64, 65, 66, 67, 68, 69]]
+                               [9, 10, 11, 12, 13, 15, 17, 18, 19, 20, 56, 58, 59, 61, 62, 63, 64, 65, 66, 67, 68, 69]]),
+    (2,[],[]),
+    (3,[],[]),
+    (4,[],[]),
+    ]
 
-
-
-def test_trigger_patches_10modules_minus_3pixels_camera_ValueError():
-    import pytest
+@pytest.mark.parametrize("camera_type,expected_central,expected_patches",testdata)
+def test_various_cameras(camera_type,expected_central,expected_patches):
     import numpy as np
     from astropy import units as u
     from astropy import table
     from ctapipe_io_nectarcam import module_central,nectar_trigger_patches
     from ctapipe.instrument.camera.geometry import CameraGeometry
     
-    pixels,radius,camera_name = make_new_cameras(2,False)
-
-    n_pix = len(pixels)
-    pix_x=pixels[:,0]*u.cm
-    pix_y=pixels[:,1]*u.cm 
-
-    # In future, shouldn't need to do this.
-    pix_area = np.array([np.pi*radius**2]*n_pix)*u.cm**2    
-
-    geom_new = CameraGeometry(camera_name,
-                              pix_x=pix_x,pix_y=pix_y,
-                              pix_id=table.column.Column(range(n_pix)),
-                              pix_area=pix_area,
-                              pix_type="hexagon")
-    
-    with pytest.raises(Exception):
-        pix_mid_module = module_central(geom_new)
-
-
-def test_trigger_patches_10modules_minus_7_central_pixels_ValueError():
-    import pytest
-    import numpy as np
-    from astropy import units as u
-    from astropy import table
-    from ctapipe_io_nectarcam import module_central,nectar_trigger_patches
-    from ctapipe.instrument.camera.geometry import CameraGeometry
-    
-    pixels,radius,camera_name = make_new_cameras(3,False)
+    pixels,radius,camera_name = make_new_cameras(camera_type,False)
 
     n_pix = len(pixels)
     pix_x=pixels[:,0]*u.cm
@@ -244,35 +163,21 @@ def test_trigger_patches_10modules_minus_7_central_pixels_ValueError():
                               pix_area=pix_area,
                               pix_type="hexagon")
     
-    with pytest.raises(Exception):
+    if camera_type<2: # Good cameras, so can get the pix_mid_module and the trigger_patches
+
         pix_mid_module = module_central(geom_new)
+        assert pix_mid_module == expected_central
 
+        trigger_patches = nectar_trigger_patches(geom_new,
+                                                pix_mid_module)
 
-def test_trigger_patches_10modules_minus_7_edge_pixels_ValueError():
-    import pytest
-    import numpy as np
-    from astropy import units as u
-    from astropy import table
-    from ctapipe_io_nectarcam import module_central,nectar_trigger_patches
-    from ctapipe.instrument.camera.geometry import CameraGeometry
-    
-    pixels,radius,camera_name = make_new_cameras(4,False)
+        assert trigger_patches == expected_patches
 
-    n_pix = len(pixels)
-    pix_x=pixels[:,0]*u.cm
-    pix_y=pixels[:,1]*u.cm
-
-    # In future, shouldn't need to do this.
-    pix_area = np.array([np.pi*radius**2]*n_pix)*u.cm**2    
-
-    geom_new = CameraGeometry(camera_name,
-                              pix_x=pix_x,pix_y=pix_y,
-                              pix_id=table.column.Column(range(n_pix)),
-                              pix_area=pix_area,
-                              pix_type="hexagon")
-    
-    with pytest.raises(Exception):
-        pix_mid_module = module_central(geom_new)
+    else: # The Bad and the Ugly cameras, fails even to get pix_mid_module
+        
+        with pytest.raises(Exception):
+            pix_mid_module = module_central(geom_new)
+            return
 
 
 # +
