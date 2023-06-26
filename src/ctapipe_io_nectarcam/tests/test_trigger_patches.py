@@ -12,11 +12,9 @@
 #     name: python3
 # ---
 
-# # DO NOT EDIT!
-# Instead edit the notebook in `ctapipe_io_nectarcam/notebooks/test_trigger_patches.ipynb` then create this file with
-# ```
-# jupytext ../../../notebooks/test_trigger_patches.ipynb -o ./test_trigger_patches.py
-# ```
+# # Open this as a notebook, to play around / explore.
+#
+# ## But then, clear cell outputs.
 
 def make_new_cameras(camera_type=0,display=False):
     import numpy as np
