@@ -1001,8 +1001,8 @@ class MultiFiles:
         for path in paths:
 
             try:
-                self._file[path] = File(path)
-                self._events_table[path] = File(path).Events
+                self._file[path] = File(str(path))
+                self._events_table[path] = File(str(path)).Events
                 self._events[path] = next(self._file[path].Events)
 
                 # verify where the CameraConfig is present
