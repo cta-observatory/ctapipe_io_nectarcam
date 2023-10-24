@@ -2,8 +2,11 @@ from ctapipe.utils import get_dataset_path
 from ctapipe_io_nectarcam.constants import N_GAINS, N_SAMPLES, N_PIXELS
 from traitlets.config import Config
 
-FIRST_EVENT_NUMBER_IN_FILE = 1
-example_file_path = get_dataset_path("NectarCAM.Run0890.10events.fits.fz")
+# Beware: the current test file, NectarCAM.Run4717.0000.fits.fz, only contains even
+# events. The test_loop_over_events test and FIRST_EVENT_NUMBER_IN_FILE should match
+# even events !
+FIRST_EVENT_NUMBER_IN_FILE = 2
+example_file_path = get_dataset_path("NectarCAM.Run4717.0000.fits.fz")
 
 
 def test_loop_over_events():
@@ -19,7 +22,7 @@ def test_loop_over_events():
     for i, event in enumerate(inputfile_reader):
         assert event.trigger.tels_with_trigger == [0]
         for telid in event.trigger.tels_with_trigger:
-            assert event.index.event_id == FIRST_EVENT_NUMBER_IN_FILE + i
+            assert event.index.event_id == FIRST_EVENT_NUMBER_IN_FILE + i*2
             assert event.r0.tel[telid].waveform.shape == waveform_shape
 
     # make sure max_events works
