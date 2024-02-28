@@ -1,24 +1,17 @@
+name: ctapipe-io-nectarcam
 channels:
   - conda-forge
   - default
 dependencies:
-  - ctapipe~=0.19
-  #- astropy~=4.2 # VIM : let the ctapipe version decide
-  #- python=3.8 # nail the python version, so conda does not try upgrading / dowgrading # VIM : let the ctapipe version decide
-  #- eventio
-  #- corsikaio
-  - protozfits
-  - zeromq
+  - ctapipe=0.19
+  - h5py
   - ipython
   - numba
-  #- numpy=1.22 # higher versions >=1.23 don't work due to astropy4 dependency in ctapipe0.12 # VIM : let the ctapipe version decide
   - numpydoc
-  - pytest
-  #- pytables>=3.7 # VIM : let the ctapipe version decide
-  - pyyaml
-  - zlib
   - pip
-  - h5py
+  - protozfits
+  - pytest
   - pytest-runner
-#  - pip:
-#      - pytest_runner
+  - pyyaml
+  - zeromq
+  - zlib

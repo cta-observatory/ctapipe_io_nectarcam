@@ -1,6 +1,56 @@
 [build-system]
-requires = ["setuptools >= 64.0.3", "wheel", "setuptools_scm[toml]>=3.4"]
+requires = ["setuptools >= 65", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "ctapipe_io_nectarcam"
+description = "ctapipe plugin for reading NectarCam files"
+readme = "README.md"
+authors = [{name = "NectarCAM collaboration"}]
+license = {text = "BSD-3-Clause"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: BSD License",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11"
+]
+requires-python = ">=3.9"
+dependencies = [
+    "ctapipe~=0.19",
+    "protozfits",
+]
+
+# needed for setuptools_scm, we don't define a static version
+dynamic = ["version"]
+
+[project.urls]
+"Bug Tracker" = "https://github.com/cta-observatory/ctapipe_io_nectarcam/issues"
+"Source Code" = "https://github.com/cta-observatory/ctapipe_io_nectarcam"
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-cov",
+]
+dev = [
+    "setuptools_scm",
+]
+# we can use self-references to simplify all
+all = [
+    "ctapipe_io_nectarcam[test,dev]",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["ctapipe_io_nectarcam._dev_version"]
+
+[tool.setuptools.package-data]
+"*" = ["resources/*"]
 
 [tool.setuptools_scm]
 write_to = "src/ctapipe_io_nectarcam/_version.py"
