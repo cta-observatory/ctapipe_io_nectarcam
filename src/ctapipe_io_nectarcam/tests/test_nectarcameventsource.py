@@ -10,29 +10,31 @@ example_file_path = get_dataset_path("NectarCAM.Run4717.0000.fits.fz")
 
 
 def test_loop_over_events():
-    from ctapipe_io_nectarcam import NectarCAMEventSource
+    from ctapipe_io_nectarcam import NectarCAMEventSource, LightNectarCAMEventSource
 
-    n_events = 10
-    inputfile_reader = NectarCAMEventSource(
-        input_url=example_file_path,
-        max_events=n_events
-    )
+    for event_source in [NectarCAMEventSource, LightNectarCAMEventSource]:
+        n_events = 10
+        inputfile_reader = event_source(
+            input_url=example_file_path,
+            max_events=n_events
+        )
 
-    waveform_shape = (N_GAINS, N_PIXELS, N_SAMPLES)
-    for i, event in enumerate(inputfile_reader):
-        assert event.trigger.tels_with_trigger == [0]
-        for telid in event.trigger.tels_with_trigger:
-            assert event.index.event_id == FIRST_EVENT_NUMBER_IN_FILE + i*2
-            assert event.r0.tel[telid].waveform.shape == waveform_shape
+        waveform_shape = (N_GAINS, N_PIXELS, N_SAMPLES)
+        for i, event in enumerate(inputfile_reader):
+            assert event.trigger.tels_with_trigger == [0]
+            for telid in event.trigger.tels_with_trigger:
+                assert event.index.event_id == FIRST_EVENT_NUMBER_IN_FILE + i*2
+                assert event.r0.tel[telid].waveform.shape == waveform_shape
 
-    # make sure max_events works
-    assert i == n_events - 1
+        # make sure max_events works
+        assert i == n_events - 1
 
 
 def test_is_compatible():
-    from ctapipe_io_nectarcam import NectarCAMEventSource
+    from ctapipe_io_nectarcam import NectarCAMEventSource, LightNectarCAMEventSource
 
-    assert NectarCAMEventSource.is_compatible(example_file_path)
+    for event_source in [NectarCAMEventSource, LightNectarCAMEventSource]:
+        assert event_source.is_compatible(example_file_path)
 
 
 def test_factory_for_nectarcam_file():
@@ -42,23 +44,24 @@ def test_factory_for_nectarcam_file():
 
     # explicit import after event_source, to test if this
     # package is detected by ctapipe
-    from ctapipe_io_nectarcam import NectarCAMEventSource
-    assert isinstance(reader, NectarCAMEventSource)
+    from ctapipe_io_nectarcam import LightNectarCAMEventSource
+    assert isinstance(reader, LightNectarCAMEventSource)
 
 def test_subarray():
-    from ctapipe_io_nectarcam import NectarCAMEventSource
+    from ctapipe_io_nectarcam import NectarCAMEventSource, LightNectarCAMEventSource
 
-    n_events = 10
-    inputfile_reader = NectarCAMEventSource(
-        input_url=example_file_path,
-        max_events=n_events
-        )
-    subarray = inputfile_reader.subarray
-    subarray.info()
-    subarray.to_table()
+    for event_source in [NectarCAMEventSource, LightNectarCAMEventSource]:
+        n_events = 10
+        inputfile_reader = event_source(
+            input_url=example_file_path,
+            max_events=n_events
+            )
+        subarray = inputfile_reader.subarray
+        subarray.info()
+        subarray.to_table()
 
-    n_camera_pixels = inputfile_reader.subarray.tel[0].camera.geometry.n_pixels
-    assert n_camera_pixels == N_PIXELS
+        n_camera_pixels = inputfile_reader.subarray.tel[0].camera.geometry.n_pixels
+        assert n_camera_pixels == N_PIXELS
 
 def test_time_precision():
     """Make sure UCTS time precision is not lost
@@ -74,13 +77,13 @@ def test_time_precision():
     assert fabs((time2 - time1).to_value(u.ns) - delta) < 1
 
 def test_r1_waveforms():
-    from ctapipe_io_nectarcam import NectarCAMEventSource
+    from ctapipe_io_nectarcam import NectarCAMEventSource, LightNectarCAMEventSource
 
     # without gain selection
     config = Config(dict(
         NectarCAMEventSource=dict(
             NectarCAMR0Corrections=dict(
-                select_gain = False,
+                select_gain=False,
             )
         )
     ))
@@ -88,8 +91,8 @@ def test_r1_waveforms():
     n_events = 10
     inputfile_reader = NectarCAMEventSource(
         input_url=example_file_path,
-        max_events = n_events,
-        config = config
+        max_events=n_events,
+        config=config
     )
 
     waveform_shape = (N_GAINS, N_PIXELS, N_SAMPLES)
@@ -101,7 +104,7 @@ def test_r1_waveforms():
     config = Config(dict(
         NectarCAMEventSource=dict(
             NectarCAMR0Corrections=dict(
-                select_gain = True,
+                select_gain=True,
             )
         )
     ))
@@ -109,12 +112,11 @@ def test_r1_waveforms():
     n_events = 10
     inputfile_reader = NectarCAMEventSource(
         input_url=example_file_path,
-        max_events = n_events,
-        config = config
+        max_events=n_events,
+        config=config
     )
 
     waveform_shape = (N_PIXELS, N_SAMPLES)
     for event in inputfile_reader:
         for telid in event.trigger.tels_with_trigger:
             assert event.r1.tel[telid].waveform.shape == waveform_shape
-
