@@ -475,18 +475,21 @@ class NectarCAMEventSource(EventSource):
             self.file_list = [self.input_url]
 
         self.multi_file = MultiFiles(self.file_list)
+        old_data = self.multi_file._old_data_file
+        # self.multi_file._old_data_file true if old, false otherwise
         self.camera_config = self.multi_file.camera_config
         self.log.info("Read {} input files".format(self.multi_file.num_inputs()))
-        self.run_id = self.camera_config.configuration_id
-        self.tel_id = self.camera_config.telescope_id #VIM : Change the _tel_id to tel_id to be consistent with lst
-        self.run_start = Time(self.camera_config.date, format='unix')
+        self.run_id = self.camera_config.configuration_id if old_data else self.camera_config.local_run_id
+        print(f'VIM DEBUG> run: {self.run_id}')
+        self.tel_id = self.camera_config.telescope_id if old_data else self.camera_config.tel_id
+        self.run_start = Time(self.camera_config.date, format='unix') if old_data else self.camera_config.config_time_s
         self.geometry_version = 3
         self._subarray = self.create_subarray(self.geometry_version, self.tel_id)
         self.r0_r1_calibrator = NectarCAMR0Corrections(
              subarray=self._subarray, parent=self
          )
         self.nectarcam_service = self.fill_nectarcam_service_container_from_zfile(self.tel_id,
-                                                                                  self.camera_config)
+                                                                                  self.camera_config, old_data)
 
         target_info = {}
 
@@ -675,26 +678,58 @@ class NectarCAMEventSource(EventSource):
         return is_protobuf_zfits_file & is_nectarcam_file
 
     @staticmethod
-    def fill_nectarcam_service_container_from_zfile(tel_id, camera_config):
+    def fill_nectarcam_service_container_from_zfile(tel_id, camera_config, old_data):
         """
         Fill NectarCAM Service container with specific NectarCAM service data data
         (from the CameraConfig table of zfit file)
+
+        TODO : ADD THE NEW FIELDS !!!!
         """
+        # Will debug always be there ? 
+        has_debug = hasattr(camera_config,'debug')
+
+
+        if old_data:
+            cs_serial = camera_config.cs_serial
+            configuration_id = camera_config.configuration_id
+            acquisition_mode = camera_config.nectarcam.acquisition_mode
+            date = camera_config.date
+            num_samples=camera_config.num_samples
+            pixel_ids = camera_config.expected_pixels_id
+            num_modules = camera_config.nectarcam.num_modules
+            module_ids=camera_config.nectarcam.expected_modules_id
+            idaq_version=camera_config.nectarcam.idaq_version
+            cdhs_version=camera_config.nectarcam.cdhs_version
+            algorithms=camera_config.nectarcam.algorithms
+        else:
+            cs_serial = camera_config.debug.cs_serial if has_debug else "None"
+            configuration_id = camera_config.camera_config_id
+            acquisition_mode = None # in v6 ? # VIM IMPORTANT
+            date = camera_config.config_time_s
+            num_samples=camera_config.num_samples_nominal
+            pixel_ids = camera_config.pixel_id_map
+            num_modules = camera_config.num_modules
+            module_ids=camera_config.module_id_map
+            idaq_version=camera_config.debug.evb_version if has_debug else 'None'
+            cdhs_version=camera_config.debug.cdhs_version if has_debug else 'None'
+            algorithms=camera_config.calibration_algorithm_id
+
+
         return NectarCAMServiceContainer(
             telescope_id=tel_id,
-            cs_serial=camera_config.cs_serial,
-            configuration_id=camera_config.configuration_id,
-            acquisition_mode=camera_config.nectarcam.acquisition_mode,
-            date=camera_config.date,
+            cs_serial=cs_serial,
+            configuration_id=configuration_id,
+            acquisition_mode=acquisition_mode,
+            date=date,
             num_pixels=camera_config.num_pixels,
-            num_samples=camera_config.num_samples,
-            pixel_ids=camera_config.expected_pixels_id,
+            num_samples=num_samples,
+            pixel_ids=pixel_ids,
             data_model_version=camera_config.data_model_version,
-            num_modules=camera_config.nectarcam.num_modules,
-            module_ids=camera_config.nectarcam.expected_modules_id,
-            idaq_version=camera_config.nectarcam.idaq_version,
-            cdhs_version=camera_config.nectarcam.cdhs_version,
-            algorithms=camera_config.nectarcam.algorithms,
+            num_modules=num_modules,
+            module_ids=module_ids,
+            idaq_version=idaq_version,
+            cdhs_version=cdhs_version,
+            algorithms=algorithms,
         )
 
     def fill_nectarcam_event_container_from_zfile(self, array_event, event):
@@ -989,6 +1024,7 @@ class MultiFiles:
         self._events_table = {}
         self._camera_config = {}
         self.camera_config = None
+        self._old_data_file = True
 
         paths = []
         for file_name in file_list:
@@ -1007,12 +1043,20 @@ class MultiFiles:
 
                 # verify where the CameraConfig is present
                 if 'CameraConfig' in self._file[path].__dict__.keys():
+                    print("Reading Old File")
                     self._camera_config[path] = next(self._file[path].CameraConfig)
 
                     # for the moment it takes the first CameraConfig it finds (to be changed)
                     if (self.camera_config is None):
                         self.camera_config = self._camera_config[path]
+                elif 'CameraConfiguration' in self._file[path].__dict__.keys():
+                    print("Reading New File")
+                    self._old_data_file = False
+                    self._camera_config[path] = next(self._file[path].CameraConfiguration)
 
+                    # for the moment it takes the first CameraConfig it finds (to be changed)
+                    if (self.camera_config is None):
+                        self.camera_config = self._camera_config[path]
 
             except StopIteration:
                 pass

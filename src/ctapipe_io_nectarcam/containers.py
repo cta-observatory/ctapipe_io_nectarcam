@@ -34,6 +34,21 @@ class NectarCAMServiceContainer(Container):
     module_ids = Field([], "module ids")
     num_modules = Field(-1, "number of modules")
 
+    ## Add new fields for the EVB v6 !!!
+    #num_channels = Field(-1, "number of channels")
+    #calibration_service_id = Field(-1,"calibration service id")
+    #tdp_type = Field([],"tdp type")
+    #tdp_action = Field([],"tdp action")
+    #tdp_type = Field([],"tdp type")
+    #num_channels
+    #calibration_service_id
+    #debug/tdp_type
+    #debug/tdp_action
+    #debug/ttype_pattern
+
+
+
+
 
 class NectarCAMEventContainer(Container):
     """
