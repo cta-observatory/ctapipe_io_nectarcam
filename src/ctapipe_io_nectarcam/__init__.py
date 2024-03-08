@@ -46,6 +46,8 @@ from .anyarray_dtypes import (
 )
 from .version import __version__
 
+from IPython import embed
+
 __all__ = ['NectarCAMEventSource', '__version__']
 
 S_TO_NS = np.uint64(1e9)
@@ -475,21 +477,21 @@ class NectarCAMEventSource(EventSource):
             self.file_list = [self.input_url]
 
         self.multi_file = MultiFiles(self.file_list)
-        old_data = self.multi_file._old_data_file
+        self._old_data = self.multi_file._old_data_file
         # self.multi_file._old_data_file true if old, false otherwise
         self.camera_config = self.multi_file.camera_config
         self.log.info("Read {} input files".format(self.multi_file.num_inputs()))
-        self.run_id = self.camera_config.configuration_id if old_data else self.camera_config.local_run_id
+        self.run_id = self.camera_config.configuration_id if self._old_data else self.camera_config.local_run_id
         print(f'VIM DEBUG> run: {self.run_id}')
-        self.tel_id = self.camera_config.telescope_id if old_data else self.camera_config.tel_id
-        self.run_start = Time(self.camera_config.date, format='unix') if old_data else self.camera_config.config_time_s
+        self.tel_id = self.camera_config.telescope_id if self._old_data else self.camera_config.tel_id
+        self.run_start = Time(self.camera_config.date, format='unix') if self._old_data else self.camera_config.config_time_s
         self.geometry_version = 3
         self._subarray = self.create_subarray(self.geometry_version, self.tel_id)
         self.r0_r1_calibrator = NectarCAMR0Corrections(
              subarray=self._subarray, parent=self
          )
         self.nectarcam_service = self.fill_nectarcam_service_container_from_zfile(self.tel_id,
-                                                                                  self.camera_config, old_data)
+                                                                                  self.camera_config, self._old_data)
 
         target_info = {}
 
@@ -544,6 +546,10 @@ class NectarCAMEventSource(EventSource):
     @property
     def subarray(self):
         return self._subarray
+
+    @property
+    def old_data(self):
+        return self._old_data
 
     @staticmethod
     def create_subarray(geometry_version, tel_id=0):
@@ -601,7 +607,7 @@ class NectarCAMEventSource(EventSource):
     @property
     def obs_ids(self):
         # currently no obs id is available from the input files
-        return [self.camera_config.configuration_id, ]
+        return [self.camera_config.configuration_id if self._old_data else self.camera_config.camera_config_id, ]
 
     def _generator(self):
 
@@ -625,7 +631,7 @@ class NectarCAMEventSource(EventSource):
             array_event.index.obs_id = self.obs_ids[0]
 
             # fill R0/R1 data
-            self.fill_r0r1_container(array_event, event)
+            self.fill_r0r1_container(array_event, event) ## svc or use self.nectarcam_service
             # fill specific NectarCAM event data
             # fill specific NectarCAM event data
             self.fill_nectarcam_event_container_from_zfile(array_event, event)
@@ -738,28 +744,42 @@ class NectarCAMEventSource(EventSource):
         event_container = NectarCAMEventContainer()
         array_event.nectarcam.tel[tel_id].evt = event_container
 
-        event_container.configuration_id = event.configuration_id
-        event_container.event_id = event.event_id
-        event_container.tel_event_id = event.tel_event_id
-        event_container.pixel_status = event.pixel_status
-        event_container.ped_id = event.ped_id
-        event_container.module_status = event.nectarcam.module_status
-        event_container.extdevices_presence = event.nectarcam.extdevices_presence
-        event_container.swat_data = event.nectarcam.swat_data
-        event_container.counters = event.nectarcam.counters
 
+        if self.old_data:
+            nectarcam_data                   = event.nectarcam 
+            event_container.configuration_id = event.configuration_id 
+            event_container.tel_event_id     = event.tel_event_id
+            event_container.ped_id           = event.ped_id
+        else: 
+            nectarcam_data                   = event.debug
+            event_container.configuration_id = self.nectarcam_service.configuration_id
+            # Above info not in Event for v6. Use the one from config. Is that right ?
+            event_container.tel_event_id     = event.event_id
+            # Above info not in Event for v6. Use the event_id. is that right ? 
+            event_container.ped_id           = None
+            # Above info not in Event for v6. Put None instead 
+
+        event_container.event_id     = event.event_id
+        event_container.pixel_status = event.pixel_status
+
+        event_container.module_status       = nectarcam_data.module_status 
+        event_container.extdevices_presence = nectarcam_data.extdevices_presence
+        event_container.swat_data           = nectarcam_data.swat_data
+        event_container.counters            = nectarcam_data.counters
+
+        
         # unpack TIB data
-        unpacked_tib = event.nectarcam.tib_data.view(TIB_DTYPE)[0]
-        event_container.tib_event_counter = unpacked_tib[0]
-        event_container.tib_pps_counter = unpacked_tib[1]
+        unpacked_tib = nectarcam_data.tib_data.view(TIB_DTYPE)[0] 
+        event_container.tib_event_counter  = unpacked_tib[0]
+        event_container.tib_pps_counter    = unpacked_tib[1]
         event_container.tib_tenMHz_counter = unpacked_tib[2]
         event_container.tib_stereo_pattern = unpacked_tib[3]
         event_container.tib_masked_trigger = unpacked_tib[4]
 
         # unpack CDTS data
-        is_old_cdts = len(event.nectarcam.cdts_data) < 36
+        is_old_cdts = len(nectarcam_data.cdts_data) < 36
         if is_old_cdts:
-            unpacked_cdts = event.nectarcam.cdts_data.view(CDTS_BEFORE_37201_DTYPE)[0]
+            unpacked_cdts = nectarcam_data.cdts_data.view(CDTS_BEFORE_37201_DTYPE)[0]
             event_container.ucts_event_counter = unpacked_cdts[0]
             event_container.ucts_pps_counter = unpacked_cdts[1]
             event_container.ucts_clock_counter = unpacked_cdts[2]
@@ -768,7 +788,7 @@ class NectarCAMEventSource(EventSource):
             event_container.ucts_trigger_type = unpacked_cdts[5]
             event_container.ucts_white_rabbit_status = unpacked_cdts[6]
         else:
-            unpacked_cdts = event.nectarcam.cdts_data.view(CDTS_AFTER_37201_DTYPE)[0]
+            unpacked_cdts = nectarcam_data.cdts_data.view(CDTS_AFTER_37201_DTYPE)[0]
             event_container.ucts_timestamp = unpacked_cdts[0]
             event_container.ucts_address = unpacked_cdts[1]  # new
             event_container.ucts_event_counter = unpacked_cdts[2]
@@ -782,7 +802,7 @@ class NectarCAMEventSource(EventSource):
             event_container.cdts_version = unpacked_cdts[10]  # new
 
         # Unpack FEB counters and trigger pattern
-        self.unpack_feb_data(event_container, event)
+        self.unpack_feb_data(event_container, event, nectarcam_data)
 
     def fill_trigger_info(self, array_event):
         tel_id = self.tel_id
@@ -846,18 +866,24 @@ class NectarCAMEventSource(EventSource):
                 f'Event {array_event.index.event_id} has unknown event type, trigger: {trigger_bits:08b}')
             trigger.event_type = EventType.UNKNOWN
 
-    def unpack_feb_data(self, event_container, event):
+    def unpack_feb_data(self, event_container, event, nectarcam_data):
         '''Unpack FEB counters and trigger pattern'''
 
         # Deduce data format version
         bytes_per_module = len(
-            event.nectarcam.counters) // self.camera_config.nectarcam.num_modules
+            nectarcam_data.counters) // self.nectarcam_service.num_modules
+        # VIM NOTES> There is in v6 the num_modules per event... Use this one ? 
+
         # Remain compatible with data before addition of trigger pattern
         module_fmt = 'IHHIBBBBBBBB' if bytes_per_module > 16 else 'IHHIBBBB'
         n_fields = len(module_fmt)
-        rec_fmt = '=' + module_fmt * self.camera_config.nectarcam.num_modules
+        rec_fmt = '=' + module_fmt * self.nectarcam_service.num_modules
         # Unpack
-        unpacked_feb = struct.unpack(rec_fmt, event.nectarcam.counters)
+        unpacked_feb = struct.unpack(rec_fmt, nectarcam_data.counters)
+        #print("VIM")
+        #print(unpacked_feb)
+        #print("TOTOR")
+        #embed()
         # Initialize field containers
         n_camera_modules = N_PIXELS // 7
         event_container.feb_abs_event_id = np.zeros(shape=(n_camera_modules,), dtype=np.uint32)
@@ -873,28 +899,28 @@ class NectarCAMEventSource(EventSource):
 
         # Unpack absolute event ID
         event_container.feb_abs_event_id[
-            self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[0::n_fields]
+            self.nectarcam_service.module_ids] = unpacked_feb[0::n_fields]
         # Unpack PPS counter
         event_container.feb_pps_cnt[
-            self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[1::n_fields]
+            self.nectarcam_service.module_ids] = unpacked_feb[1::n_fields]
         # Unpack relative event ID
         event_container.feb_event_id[
-            self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[2::n_fields]
+            self.nectarcam_service.module_ids] = unpacked_feb[2::n_fields]
         # Unpack TS1 counter
         event_container.feb_ts1[
-            self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[3::n_fields]
+            self.nectarcam_service.module_ids] = unpacked_feb[3::n_fields]
         # Unpack TS2 counters
         ts2_decimal = lambda bits: bits - (1 << 8) if bits & 0x80 != 0 else bits
         ts2_decimal_vec = np.vectorize(ts2_decimal)
         event_container.feb_ts2_trig[
-            self.camera_config.nectarcam.expected_modules_id] = ts2_decimal_vec(
+            self.nectarcam_service.module_ids] = ts2_decimal_vec(
             unpacked_feb[4::n_fields])
         event_container.feb_ts2_pps[
-            self.camera_config.nectarcam.expected_modules_id] = ts2_decimal_vec(
+            self.nectarcam_service.module_ids] = ts2_decimal_vec(
             unpacked_feb[5::n_fields])
         # Loop over modules
         for module_idx, module_id in enumerate(
-                self.camera_config.nectarcam.expected_modules_id):
+                self.nectarcam_service.module_ids):
             offset = module_id * 7
             if bytes_per_module > 16:
                 field_id = 8
@@ -907,15 +933,65 @@ class NectarCAMEventSource(EventSource):
                     offset:offset + 7] = module_pattern
 
         # Unpack native charge
-        if len(event.nectarcam.charges_gain1) > 0:
+        if len(nectarcam_data.charges_gain1) > 0:
             event_container.native_charge = np.zeros(shape=(N_GAINS, N_PIXELS),
                                                      dtype=np.uint16)
-            rec_fmt = '=' + 'H' * self.camera_config.num_pixels
+            rec_fmt = '=' + 'H' * self.nectarcam_service.num_pixels
+            print(f"{rec_fmt = }")
             for gain_id in range(N_GAINS):
-                unpacked_charge = struct.unpack(rec_fmt, getattr(event.nectarcam,
+                unpacked_charge = struct.unpack(rec_fmt, getattr(nectarcam_data,
                                                                  f'charges_gain{gain_id + 1}'))
                 event_container.native_charge[
-                    gain_id, self.camera_config.expected_pixels_id] = unpacked_charge
+                    gain_id, self.nectarcam_service.pixel_ids] = unpacked_charge
+
+
+#### I AM HERE ON 8 MARCH 2024
+            
+        # # Unpack absolute event ID
+        # event_container.feb_abs_event_id[
+        #     self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[0::n_fields]
+        # # Unpack PPS counter
+        # event_container.feb_pps_cnt[
+        #     self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[1::n_fields]
+        # # Unpack relative event ID
+        # event_container.feb_event_id[
+        #     self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[2::n_fields]
+        # # Unpack TS1 counter
+        # event_container.feb_ts1[
+        #     self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[3::n_fields]
+        # # Unpack TS2 counters
+        # ts2_decimal = lambda bits: bits - (1 << 8) if bits & 0x80 != 0 else bits
+        # ts2_decimal_vec = np.vectorize(ts2_decimal)
+        # event_container.feb_ts2_trig[
+        #     self.camera_config.nectarcam.expected_modules_id] = ts2_decimal_vec(
+        #     unpacked_feb[4::n_fields])
+        # event_container.feb_ts2_pps[
+        #     self.camera_config.nectarcam.expected_modules_id] = ts2_decimal_vec(
+        #     unpacked_feb[5::n_fields])
+        # # Loop over modules
+        # for module_idx, module_id in enumerate(
+        #         self.camera_config.nectarcam.expected_modules_id):
+        #     offset = module_id * 7
+        #     if bytes_per_module > 16:
+        #         field_id = 8
+        #         # Decode trigger pattern
+        #         for pattern_id in range(n_patterns):
+        #             value = unpacked_feb[n_fields * module_idx + field_id + pattern_id]
+        #             module_pattern = [int(digit) for digit in
+        #                               reversed(bin(value)[2:].zfill(7))]
+        #             event_container.trigger_pattern[pattern_id,
+        #             offset:offset + 7] = module_pattern
+
+        # # Unpack native charge
+        # if len(event.nectarcam.charges_gain1) > 0:
+        #     event_container.native_charge = np.zeros(shape=(N_GAINS, N_PIXELS),
+        #                                              dtype=np.uint16)
+        #     rec_fmt = '=' + 'H' * self.camera_config.num_pixels
+        #     for gain_id in range(N_GAINS):
+        #         unpacked_charge = struct.unpack(rec_fmt, getattr(event.nectarcam,
+        #                                                          f'charges_gain{gain_id + 1}'))
+        #         event_container.native_charge[
+        #             gain_id, self.camera_config.expected_pixels_id] = unpacked_charge
 
     def fill_r0r1_camera_container(self, zfits_event):
         """
@@ -926,24 +1002,46 @@ class NectarCAMEventSource(EventSource):
         in the file.
         Missing or broken pixels are filled using maxval of the waveform dtype.
         """
-        n_pixels = self.camera_config.num_pixels
-        n_samples = self.camera_config.num_samples
-        expected_pixels = self.camera_config.expected_pixels_id
+
+        #print(f'TOTOR: {type(zfits_event)}') #pixel_ids
+        #nectarcam_service contain the info from camera_config but in a "uniform" way between old and v6 data
+        n_pixels        = self.nectarcam_service.num_pixels  if self.old_data else zfits_event.num_pixels
+        n_samples       = self.nectarcam_service.num_samples if self.old_data else zfits_event.num_samples
+        expected_pixels = self.nectarcam_service.pixel_ids
+
+        print(f"n_pixels: {n_pixels}, n_samples: {n_samples}")
+        #nectarcam_service
+        # Or give the camera config ?
 
         has_low_gain = (zfits_event.pixel_status & PixelStatus.LOW_GAIN_STORED).astype(bool)
         has_high_gain = (zfits_event.pixel_status & PixelStatus.HIGH_GAIN_STORED).astype(bool)
         not_broken = (has_low_gain | has_high_gain).astype(bool)
-
+        all_broken = np.count_nonzero(has_low_gain) == 0 and np.count_nonzero(has_high_gain) == 0
+        
+        # all_broken is likely because of the issue : 
+        # https://redmine.cta-observatory.org/issues/52457 
+        # so it could be a way to discriminate
+        
+        #print(f"pixel_status: {zfits_event.pixel_status}")
+        #print(f"has_high_gain: {has_high_gain} --> ({np.count_nonzero(has_high_gain)} valid)")
+        #print(f"has_low_gain: {has_low_gain} --> ({np.count_nonzero(has_low_gain)} valid)")
+        
         # broken pixels have both false, so gain selected means checking
         # if there are any pixels where exactly one of high or low gain is stored
         gain_selected = np.any(has_low_gain != has_high_gain)
+        print(f"gain_selected: {gain_selected}, all_broken: {all_broken}")
 
         # fill value for broken pixels
         dtype = zfits_event.waveform.dtype
         fill = np.iinfo(dtype).max
         # we assume that either all pixels are gain selected or none
         # only broken pixels are allowed to be missing completely
-        if gain_selected:
+        if all_broken:
+            print("WARNING> This event has a problem --> Likely a default event (cf: https://redmine.cta-observatory.org/issues/52457)")
+            r0 = R0CameraContainer()
+            r1 = R0CameraContainer()
+            #pass
+        elif gain_selected:
             selected_gain = np.where(has_high_gain, 0, 1)
             waveform = np.full((n_pixels, n_samples), fill, dtype=dtype)
             waveform[not_broken] = zfits_event.waveform.reshape((-1, n_samples))
@@ -1008,7 +1106,7 @@ class NectarCAMEventSource(EventSource):
 
         # reorder the array
         pixel_status = np.zeros(N_PIXELS)
-        pixel_status[self.camera_config.expected_pixels_id] = event.pixel_status
+        pixel_status[self.nectarcam_service.pixel_ids] = event.pixel_status
         status_container.hardware_failing_pixels[:] = pixel_status == 0
 
 class MultiFiles:
