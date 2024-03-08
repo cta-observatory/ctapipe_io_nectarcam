@@ -13,4 +13,5 @@ For development, create a new environment and run the development install:
 conda env create -n nectar-dev -f environment.yml
 conda activate nectar-dev
 pip install -e .
+pre-commit install
 ```

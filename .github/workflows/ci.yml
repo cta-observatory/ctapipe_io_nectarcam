@@ -15,6 +15,21 @@ env:
   PYTEST_ADDOPTS: --color=yes
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint
+    steps:
+      - name: Check out source repository
+        uses: actions/checkout@v3
+      - name: Set up Python environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+      - name: Runs pre-commit hooks
+        uses: pre-commit/action@v3.0.0
+        with:
+          extra_args: --files $(git diff origin/main --name-only)
+
   tests:
     runs-on: ubuntu-latest
     strategy:
