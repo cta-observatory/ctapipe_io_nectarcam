@@ -38,13 +38,15 @@ from .constants import (
     N_GAINS, N_PIXELS, N_SAMPLES
 )
 from .containers import NectarCAMDataContainer, NectarCAMServiceContainer, \
-    NectarCAMEventContainer
+    NectarCAMEventContainer, NectarCAMDataStreamContainer
 from .anyarray_dtypes import (
     CDTS_AFTER_37201_DTYPE,
     CDTS_BEFORE_37201_DTYPE,
     TIB_DTYPE,
 )
 from .version import __version__
+
+from IPython import embed
 
 __all__ = ['NectarCAMEventSource', '__version__']
 
@@ -433,6 +435,15 @@ class NectarCAMEventSource(EventSource):
         help='If True, flat field and pedestal events are also calibrated.'
     ).tag(config=True)
 
+    def _correct_tel_id(self,tel_id,run):
+        if run>=5047 and run<=5085 and tel_id==14:
+            print(f"Correcting Telescope ID from {tel_id} to 0")
+            cor_tel_id = 0 
+        else:
+            cor_tel_id = tel_id
+        return cor_tel_id
+
+
     def __init__(self, **kwargs):
         """
         Constructor
@@ -475,18 +486,24 @@ class NectarCAMEventSource(EventSource):
             self.file_list = [self.input_url]
 
         self.multi_file = MultiFiles(self.file_list)
+        self._pre_v6_data = self.multi_file._pre_v6_file
         self.camera_config = self.multi_file.camera_config
         self.log.info("Read {} input files".format(self.multi_file.num_inputs()))
-        self.run_id = self.camera_config.configuration_id
-        self.tel_id = self.camera_config.telescope_id #VIM : Change the _tel_id to tel_id to be consistent with lst
-        self.run_start = Time(self.camera_config.date, format='unix')
+        self.run_id = self.camera_config.configuration_id if self._pre_v6_data else self.camera_config.local_run_id
+        self.tel_id = self.camera_config.telescope_id if self._pre_v6_data else self.camera_config.tel_id
+        self.tel_id = self._correct_tel_id( self.tel_id, self.run_id )
+        self.run_start = Time(self.camera_config.date, format='unix') if self._pre_v6_data else self.camera_config.config_time_s
         self.geometry_version = 3
         self._subarray = self.create_subarray(self.geometry_version, self.tel_id)
         self.r0_r1_calibrator = NectarCAMR0Corrections(
              subarray=self._subarray, parent=self
          )
         self.nectarcam_service = self.fill_nectarcam_service_container_from_zfile(self.tel_id,
-                                                                                  self.camera_config)
+                                                                                  self.camera_config, 
+                                                                                  self._pre_v6_data)
+        self.nectarcam_datastream = self.fill_nectarcam_datastream_container_from_zfile(self.tel_id,
+                                                                                        self.multi_file.camera_datastream,
+                                                                                        self._pre_v6_data)
 
         target_info = {}
 
@@ -541,6 +558,10 @@ class NectarCAMEventSource(EventSource):
     @property
     def subarray(self):
         return self._subarray
+
+    @property
+    def pre_v6_data(self):
+        return self._pre_v6_data
 
     @staticmethod
     def create_subarray(geometry_version, tel_id=0):
@@ -598,8 +619,9 @@ class NectarCAMEventSource(EventSource):
     @property
     def obs_ids(self):
         # currently no obs id is available from the input files
-        return [self.camera_config.configuration_id, ]
-
+        #return [self.camera_config.configuration_id if self._pre_v6_data else self.camera_config.camera_config_id, ]
+        # change it to run_id from nectarcam_service (new) as camera_config_id is not the same as in pre_v6 data
+        return [self.nectarcam_service.run_id,]
     def _generator(self):
 
         # container for NectarCAM data
@@ -610,6 +632,7 @@ class NectarCAMEventSource(EventSource):
 
         # also add service container to the event section
         array_event.nectarcam.tel[self.tel_id].svc = self.nectarcam_service
+        array_event.nectarcam.tel[self.tel_id].dst = self.nectarcam_datastream
 
         # initialize general monitoring container
         self.initialize_mon_container(array_event)
@@ -622,7 +645,12 @@ class NectarCAMEventSource(EventSource):
             array_event.index.obs_id = self.obs_ids[0]
 
             # fill R0/R1 data
-            self.fill_r0r1_container(array_event, event)
+            self.fill_r0r1_container(array_event, event) ## svc or use self.nectarcam_service
+            
+            # bad_event = array_event.r0.tel[self.tel_id].waveform is None and array_event.r1.tel[self.tel_id].waveform is None
+            # if bad_event:
+            #     yield array_event
+
             # fill specific NectarCAM event data
             # fill specific NectarCAM event data
             self.fill_nectarcam_event_container_from_zfile(array_event, event)
@@ -633,8 +661,9 @@ class NectarCAMEventSource(EventSource):
             # fill general monitoring data
             self.fill_mon_container_from_zfile(array_event, event)
 
+            
             # gain select and calibrate to pe
-            if self.r0_r1_calibrator.calibration_path is not None:
+            if self.r0_r1_calibrator.calibration_path is not None: # and not bad_event:
                 # skip flatfield and pedestal events if asked
                 if (
                         self.calibrate_flatfields_and_pedestals
@@ -675,27 +704,81 @@ class NectarCAMEventSource(EventSource):
         return is_protobuf_zfits_file & is_nectarcam_file
 
     @staticmethod
-    def fill_nectarcam_service_container_from_zfile(tel_id, camera_config):
+    def fill_nectarcam_datastream_container_from_zfile(tel_id, camera_datastream, pre_v6_data):
         """
-        Fill NectarCAM Service container with specific NectarCAM service data data
+        Fill NectarCAM DataStream container with specific NectarCAM data stream data 
+        (from DataStream object) in the zfits file
+        """
+        ncdst = NectarCAMDataStreamContainer(telescope_id=tel_id)
+
+        if not pre_v6_data:
+            ncdst.sb_id = camera_datastream.sb_id
+            ncdst.obs_id = camera_datastream.obs_id
+            ncdst.waveform_scale = camera_datastream.waveform_scale
+            ncdst.waveform_offset = camera_datastream.waveform_offset
+        return ncdst
+
+    
+    @staticmethod
+    def fill_nectarcam_service_container_from_zfile(tel_id, camera_config, pre_v6_data):
+        """
+        Fill NectarCAM Service container with specific NectarCAM service data
         (from the CameraConfig table of zfit file)
         """
-        return NectarCAMServiceContainer(
-            telescope_id=tel_id,
-            cs_serial=camera_config.cs_serial,
-            configuration_id=camera_config.configuration_id,
-            acquisition_mode=camera_config.nectarcam.acquisition_mode,
-            date=camera_config.date,
-            num_pixels=camera_config.num_pixels,
-            num_samples=camera_config.num_samples,
-            pixel_ids=camera_config.expected_pixels_id,
-            data_model_version=camera_config.data_model_version,
-            num_modules=camera_config.nectarcam.num_modules,
-            module_ids=camera_config.nectarcam.expected_modules_id,
-            idaq_version=camera_config.nectarcam.idaq_version,
-            cdhs_version=camera_config.nectarcam.cdhs_version,
-            algorithms=camera_config.nectarcam.algorithms,
-        )
+
+        ncs = NectarCAMServiceContainer()
+        ncs.telescope_id = tel_id
+        ncs.num_pixels = camera_config.num_pixels
+        ncs.data_model_version  = camera_config.data_model_version
+
+        if pre_v6_data:
+            ncs.cs_serial = camera_config.cs_serial
+            ncs.configuration_id = camera_config.configuration_id
+            ncs.acquisition_mode = camera_config.nectarcam.acquisition_mode
+            ncs.date = camera_config.date
+            ncs.num_samples=camera_config.num_samples
+            ncs.pixel_ids = camera_config.expected_pixels_id
+            ncs.num_modules = camera_config.nectarcam.num_modules
+            ncs.module_ids=camera_config.nectarcam.expected_modules_id
+            ncs.idaq_version=camera_config.nectarcam.idaq_version
+            ncs.cdhs_version=camera_config.nectarcam.cdhs_version
+            ncs.algorithms=camera_config.nectarcam.algorithms
+
+            # new variables since v6 but might have an interest to be filled with something meaningful:
+            ncs.num_channels = N_GAINS
+            
+            # other
+            ncs.run_id = camera_config.nectarcam.run_id
+        else:
+            # Will debug always be there ? 
+            has_debug = hasattr(camera_config,'debug')
+
+            ncs.configuration_id = camera_config.camera_config_id
+            ncs.acquisition_mode = None # in v6 ? # VIM IMPORTANT
+            ncs.date = camera_config.config_time_s
+            ncs.num_samples=camera_config.num_samples_nominal
+            ncs.pixel_ids = camera_config.pixel_id_map
+            ncs.num_modules = camera_config.num_modules
+            ncs.module_ids=camera_config.module_id_map
+            ncs.algorithms=camera_config.calibration_algorithm_id
+
+            # new variables:
+            ncs.num_channels = camera_config.num_channels
+            ncs.calibration_service_id = camera_config.calibration_service_id 
+            
+            if has_debug:
+                ncs.cs_serial = camera_config.debug.cs_serial
+                ncs.idaq_version=camera_config.debug.evb_version
+                ncs.cdhs_version=camera_config.debug.cdhs_version
+                # new variables:
+                ncs.tdp_type = camera_config.debug.tdp_type 
+                ncs.tdp_action = camera_config.debug.tdp_action
+                ncs.ttype_pattern = camera_config.debug.ttype_pattern
+            
+            # other
+            ncs.run_id = camera_config.local_run_id
+
+        return ncs
 
     def fill_nectarcam_event_container_from_zfile(self, array_event, event):
 
@@ -703,28 +786,42 @@ class NectarCAMEventSource(EventSource):
         event_container = NectarCAMEventContainer()
         array_event.nectarcam.tel[tel_id].evt = event_container
 
-        event_container.configuration_id = event.configuration_id
-        event_container.event_id = event.event_id
-        event_container.tel_event_id = event.tel_event_id
-        event_container.pixel_status = event.pixel_status
-        event_container.ped_id = event.ped_id
-        event_container.module_status = event.nectarcam.module_status
-        event_container.extdevices_presence = event.nectarcam.extdevices_presence
-        event_container.swat_data = event.nectarcam.swat_data
-        event_container.counters = event.nectarcam.counters
 
+        if self.pre_v6_data:
+            nectarcam_data                   = event.nectarcam 
+            event_container.configuration_id = event.configuration_id 
+            event_container.tel_event_id     = event.tel_event_id
+            event_container.ped_id           = event.ped_id
+        else: 
+            nectarcam_data                   = event.debug
+            event_container.configuration_id = self.nectarcam_service.configuration_id
+            # Above info not in Event for v6. Use the one from config. Is that right ?
+            event_container.tel_event_id     = event.event_id
+            # Above info not in Event for v6. Use the event_id. is that right ? 
+            event_container.ped_id           = None
+            # Above info not in Event for v6. Put None instead 
+
+        event_container.event_id     = event.event_id
+        event_container.pixel_status = event.pixel_status
+
+        event_container.module_status       = nectarcam_data.module_status 
+        event_container.extdevices_presence = nectarcam_data.extdevices_presence
+        event_container.swat_data           = nectarcam_data.swat_data
+        event_container.counters            = nectarcam_data.counters
+
+        
         # unpack TIB data
-        unpacked_tib = event.nectarcam.tib_data.view(TIB_DTYPE)[0]
-        event_container.tib_event_counter = unpacked_tib[0]
-        event_container.tib_pps_counter = unpacked_tib[1]
+        unpacked_tib = nectarcam_data.tib_data.view(TIB_DTYPE)[0] 
+        event_container.tib_event_counter  = unpacked_tib[0]
+        event_container.tib_pps_counter    = unpacked_tib[1]
         event_container.tib_tenMHz_counter = unpacked_tib[2]
         event_container.tib_stereo_pattern = unpacked_tib[3]
         event_container.tib_masked_trigger = unpacked_tib[4]
 
         # unpack CDTS data
-        is_old_cdts = len(event.nectarcam.cdts_data) < 36
+        is_old_cdts = len(nectarcam_data.cdts_data) < 36
         if is_old_cdts:
-            unpacked_cdts = event.nectarcam.cdts_data.view(CDTS_BEFORE_37201_DTYPE)[0]
+            unpacked_cdts = nectarcam_data.cdts_data.view(CDTS_BEFORE_37201_DTYPE)[0]
             event_container.ucts_event_counter = unpacked_cdts[0]
             event_container.ucts_pps_counter = unpacked_cdts[1]
             event_container.ucts_clock_counter = unpacked_cdts[2]
@@ -733,7 +830,7 @@ class NectarCAMEventSource(EventSource):
             event_container.ucts_trigger_type = unpacked_cdts[5]
             event_container.ucts_white_rabbit_status = unpacked_cdts[6]
         else:
-            unpacked_cdts = event.nectarcam.cdts_data.view(CDTS_AFTER_37201_DTYPE)[0]
+            unpacked_cdts = nectarcam_data.cdts_data.view(CDTS_AFTER_37201_DTYPE)[0]
             event_container.ucts_timestamp = unpacked_cdts[0]
             event_container.ucts_address = unpacked_cdts[1]  # new
             event_container.ucts_event_counter = unpacked_cdts[2]
@@ -747,7 +844,7 @@ class NectarCAMEventSource(EventSource):
             event_container.cdts_version = unpacked_cdts[10]  # new
 
         # Unpack FEB counters and trigger pattern
-        self.unpack_feb_data(event_container, event)
+        self.unpack_feb_data(event_container, event, nectarcam_data)
 
     def fill_trigger_info(self, array_event):
         tel_id = self.tel_id
@@ -811,18 +908,21 @@ class NectarCAMEventSource(EventSource):
                 f'Event {array_event.index.event_id} has unknown event type, trigger: {trigger_bits:08b}')
             trigger.event_type = EventType.UNKNOWN
 
-    def unpack_feb_data(self, event_container, event):
+    def unpack_feb_data(self, event_container, event, nectarcam_data):
         '''Unpack FEB counters and trigger pattern'''
 
         # Deduce data format version
         bytes_per_module = len(
-            event.nectarcam.counters) // self.camera_config.nectarcam.num_modules
+            nectarcam_data.counters) // self.nectarcam_service.num_modules
+        # VIM NOTES> There is in v6 the num_modules per event... Use this one ? 
+
         # Remain compatible with data before addition of trigger pattern
         module_fmt = 'IHHIBBBBBBBB' if bytes_per_module > 16 else 'IHHIBBBB'
         n_fields = len(module_fmt)
-        rec_fmt = '=' + module_fmt * self.camera_config.nectarcam.num_modules
+        rec_fmt = '=' + module_fmt * self.nectarcam_service.num_modules
         # Unpack
-        unpacked_feb = struct.unpack(rec_fmt, event.nectarcam.counters)
+        unpacked_feb = struct.unpack(rec_fmt, nectarcam_data.counters)
+
         # Initialize field containers
         n_camera_modules = N_PIXELS // 7
         event_container.feb_abs_event_id = np.zeros(shape=(n_camera_modules,), dtype=np.uint32)
@@ -838,28 +938,28 @@ class NectarCAMEventSource(EventSource):
 
         # Unpack absolute event ID
         event_container.feb_abs_event_id[
-            self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[0::n_fields]
+            self.nectarcam_service.module_ids] = unpacked_feb[0::n_fields]
         # Unpack PPS counter
         event_container.feb_pps_cnt[
-            self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[1::n_fields]
+            self.nectarcam_service.module_ids] = unpacked_feb[1::n_fields]
         # Unpack relative event ID
         event_container.feb_event_id[
-            self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[2::n_fields]
+            self.nectarcam_service.module_ids] = unpacked_feb[2::n_fields]
         # Unpack TS1 counter
         event_container.feb_ts1[
-            self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[3::n_fields]
+            self.nectarcam_service.module_ids] = unpacked_feb[3::n_fields]
         # Unpack TS2 counters
         ts2_decimal = lambda bits: bits - (1 << 8) if bits & 0x80 != 0 else bits
         ts2_decimal_vec = np.vectorize(ts2_decimal)
         event_container.feb_ts2_trig[
-            self.camera_config.nectarcam.expected_modules_id] = ts2_decimal_vec(
+            self.nectarcam_service.module_ids] = ts2_decimal_vec(
             unpacked_feb[4::n_fields])
         event_container.feb_ts2_pps[
-            self.camera_config.nectarcam.expected_modules_id] = ts2_decimal_vec(
+            self.nectarcam_service.module_ids] = ts2_decimal_vec(
             unpacked_feb[5::n_fields])
         # Loop over modules
         for module_idx, module_id in enumerate(
-                self.camera_config.nectarcam.expected_modules_id):
+                self.nectarcam_service.module_ids):
             offset = module_id * 7
             if bytes_per_module > 16:
                 field_id = 8
@@ -872,15 +972,68 @@ class NectarCAMEventSource(EventSource):
                     offset:offset + 7] = module_pattern
 
         # Unpack native charge
-        if len(event.nectarcam.charges_gain1) > 0:
+        if len(nectarcam_data.charges_gain1) > 0:
             event_container.native_charge = np.zeros(shape=(N_GAINS, N_PIXELS),
                                                      dtype=np.uint16)
-            rec_fmt = '=' + 'H' * self.camera_config.num_pixels
+            rec_fmt = '=' + 'H' * self.nectarcam_service.num_pixels
+
             for gain_id in range(N_GAINS):
-                unpacked_charge = struct.unpack(rec_fmt, getattr(event.nectarcam,
+                unpacked_charge = struct.unpack(rec_fmt, getattr(nectarcam_data,
                                                                  f'charges_gain{gain_id + 1}'))
                 event_container.native_charge[
-                    gain_id, self.camera_config.expected_pixels_id] = unpacked_charge
+                    gain_id, self.nectarcam_service.pixel_ids] = unpacked_charge
+
+        if not self.pre_v6_data:
+            event_container.first_cell_id = np.full( (N_PIXELS,), -1, dtype=event.first_cell_id.dtype)
+            event_container.first_cell_id[ self.nectarcam_service.pixel_ids ] = event.first_cell_id
+        #embed()
+#### I AM HERE ON 8 MARCH 2024
+            
+        # # Unpack absolute event ID
+        # event_container.feb_abs_event_id[
+        #     self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[0::n_fields]
+        # # Unpack PPS counter
+        # event_container.feb_pps_cnt[
+        #     self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[1::n_fields]
+        # # Unpack relative event ID
+        # event_container.feb_event_id[
+        #     self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[2::n_fields]
+        # # Unpack TS1 counter
+        # event_container.feb_ts1[
+        #     self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[3::n_fields]
+        # # Unpack TS2 counters
+        # ts2_decimal = lambda bits: bits - (1 << 8) if bits & 0x80 != 0 else bits
+        # ts2_decimal_vec = np.vectorize(ts2_decimal)
+        # event_container.feb_ts2_trig[
+        #     self.camera_config.nectarcam.expected_modules_id] = ts2_decimal_vec(
+        #     unpacked_feb[4::n_fields])
+        # event_container.feb_ts2_pps[
+        #     self.camera_config.nectarcam.expected_modules_id] = ts2_decimal_vec(
+        #     unpacked_feb[5::n_fields])
+        # # Loop over modules
+        # for module_idx, module_id in enumerate(
+        #         self.camera_config.nectarcam.expected_modules_id):
+        #     offset = module_id * 7
+        #     if bytes_per_module > 16:
+        #         field_id = 8
+        #         # Decode trigger pattern
+        #         for pattern_id in range(n_patterns):
+        #             value = unpacked_feb[n_fields * module_idx + field_id + pattern_id]
+        #             module_pattern = [int(digit) for digit in
+        #                               reversed(bin(value)[2:].zfill(7))]
+        #             event_container.trigger_pattern[pattern_id,
+        #             offset:offset + 7] = module_pattern
+
+        # # Unpack native charge
+        # if len(event.nectarcam.charges_gain1) > 0:
+        #     event_container.native_charge = np.zeros(shape=(N_GAINS, N_PIXELS),
+        #                                              dtype=np.uint16)
+        #     rec_fmt = '=' + 'H' * self.camera_config.num_pixels
+        #     for gain_id in range(N_GAINS):
+        #         unpacked_charge = struct.unpack(rec_fmt, getattr(event.nectarcam,
+        #                                                          f'charges_gain{gain_id + 1}'))
+        #         event_container.native_charge[
+        #             gain_id, self.camera_config.expected_pixels_id] = unpacked_charge
 
     def fill_r0r1_camera_container(self, zfits_event):
         """
@@ -891,29 +1044,52 @@ class NectarCAMEventSource(EventSource):
         in the file.
         Missing or broken pixels are filled using maxval of the waveform dtype.
         """
-        n_pixels = self.camera_config.num_pixels
-        n_samples = self.camera_config.num_samples
-        expected_pixels = self.camera_config.expected_pixels_id
+
+        #nectarcam_service contain the info from camera_config but in a "uniform" way between old and v6 data
+        n_pixels        = self.nectarcam_service.num_pixels  if self.pre_v6_data else zfits_event.num_pixels
+        n_samples       = self.nectarcam_service.num_samples if self.pre_v6_data else zfits_event.num_samples
+        expected_pixels = self.nectarcam_service.pixel_ids
 
         has_low_gain = (zfits_event.pixel_status & PixelStatus.LOW_GAIN_STORED).astype(bool)
         has_high_gain = (zfits_event.pixel_status & PixelStatus.HIGH_GAIN_STORED).astype(bool)
         not_broken = (has_low_gain | has_high_gain).astype(bool)
+        all_broken = np.count_nonzero(has_low_gain) == 0 and np.count_nonzero(has_high_gain) == 0
+        
+        # all_broken is likely because of the issue : 
+        # https://redmine.cta-observatory.org/issues/52457 
+        # so it could be a way to discriminate
 
         # broken pixels have both false, so gain selected means checking
         # if there are any pixels where exactly one of high or low gain is stored
         gain_selected = np.any(has_low_gain != has_high_gain)
 
         # fill value for broken pixels
-        dtype = zfits_event.waveform.dtype
-        fill = np.iinfo(dtype).max
+        
+        if self.pre_v6_data:
+            dtype = zfits_event.waveform.dtype
+            fill = np.iinfo(dtype).max
+        else:
+            dtype = np.float32 
+            fill = np.finfo(dtype).max
+        # VIM : We received uint16 data from the EVB, 
+        # but because of the scaling in v6 we gets back to a float, so let's use directly floats
+
         # we assume that either all pixels are gain selected or none
         # only broken pixels are allowed to be missing completely
+
+        # if all_broken:
+        #     #print("WARNING> This event has a problem --> Likely a default event (cf: https://redmine.cta-observatory.org/issues/52457)")
+        #     ## Create a dummy event
+        #     r0 = R0CameraContainer()
+        #     r1 = R1CameraContainer()
+        # elif gain_selected:
         if gain_selected:
+            print("GAIN SELECTED")
             selected_gain = np.where(has_high_gain, 0, 1)
-            waveform = np.full((n_pixels, n_samples), fill, dtype=dtype)
+            waveform = np.full((n_pixels, n_samples), fill, dtype=dtype) # VIM : Replace full by empty ?
             waveform[not_broken] = zfits_event.waveform.reshape((-1, n_samples))
 
-            reordered_waveform = np.full((N_PIXELS, N_SAMPLES), fill, dtype=dtype)
+            reordered_waveform = np.full((N_PIXELS, N_SAMPLES), fill, dtype=dtype) # VIM : Replace full by empty ?
             reordered_waveform[expected_pixels] = waveform
 
             reordered_selected_gain = np.full(N_PIXELS, -1, dtype=np.int8)
@@ -928,10 +1104,16 @@ class NectarCAMEventSource(EventSource):
             reshaped_waveform = zfits_event.waveform.reshape(N_GAINS, n_pixels, n_samples)
             # re-order the waveform following the expected_pixels_id values
             #  could also just do waveform = reshaped_waveform[np.argsort(expected_ids)]
-            reordered_waveform = np.full((N_GAINS, N_PIXELS, N_SAMPLES), fill, dtype=dtype)
+            reordered_waveform = np.full((N_GAINS, N_PIXELS, N_SAMPLES), fill, dtype=dtype) # VIM : use empty ?
             reordered_waveform[:, expected_pixels, :] = reshaped_waveform
             r0 = R0CameraContainer(waveform=reordered_waveform)
             r1 = R1CameraContainer()
+
+        if not all_broken and not self.pre_v6_data:
+            if r0.waveform is not None:
+                r0.waveform = (r0.waveform - self.nectarcam_datastream.waveform_offset)/self.nectarcam_datastream.waveform_scale
+            if r1.waveform is not None:
+                r1.waveform = (r1.waveform - self.nectarcam_datastream.waveform_offset)/self.nectarcam_datastream.waveform_scale
 
         return r0, r1
 
@@ -940,6 +1122,7 @@ class NectarCAMEventSource(EventSource):
         Fill with R0Container
         """
         r0, r1 = self.fill_r0r1_camera_container(zfits_event)
+        
         array_event.r0.tel[self.tel_id] = r0
         array_event.r1.tel[self.tel_id] = r1
 
@@ -973,7 +1156,7 @@ class NectarCAMEventSource(EventSource):
 
         # reorder the array
         pixel_status = np.zeros(N_PIXELS)
-        pixel_status[self.camera_config.expected_pixels_id] = event.pixel_status
+        pixel_status[self.nectarcam_service.pixel_ids] = event.pixel_status
         status_container.hardware_failing_pixels[:] = pixel_status == 0
 
 class MultiFiles:
@@ -988,7 +1171,10 @@ class MultiFiles:
         self._events = {}
         self._events_table = {}
         self._camera_config = {}
+        self._camera_datastream = {}
         self.camera_config = None
+        self.camera_datastream = None
+        self._pre_v6_file = True
 
         paths = []
         for file_name in file_list:
@@ -1002,17 +1188,26 @@ class MultiFiles:
 
             try:
                 self._file[path] = File(str(path))
-                self._events_table[path] = File(str(path)).Events
+                self._events_table[path] = File(str(path)).Events # VIM : Why do we open the file a second time ?
                 self._events[path] = next(self._file[path].Events)
 
                 # verify where the CameraConfig is present
                 if 'CameraConfig' in self._file[path].__dict__.keys():
+                    #print("Reading Old File")
                     self._camera_config[path] = next(self._file[path].CameraConfig)
+                elif 'CameraConfiguration' in self._file[path].__dict__.keys():
+                    #print("Reading New File")
+                    self._pre_v6_file = False
+                    self._camera_config[path] = next(self._file[path].CameraConfiguration)
+                    self._camera_datastream[path] = next(self._file[path].DataStream)
+                    
+                    # take the first datastream info it find (to be changed)
+                    if self.camera_datastream is None:
+                        self.camera_datastream = self._camera_datastream[path]
 
-                    # for the moment it takes the first CameraConfig it finds (to be changed)
-                    if (self.camera_config is None):
-                        self.camera_config = self._camera_config[path]
-
+                # for the moment it takes the first CameraConfig it finds (to be changed)
+                if (self.camera_config is None):
+                    self.camera_config = self._camera_config[path]
 
             except StopIteration:
                 pass
