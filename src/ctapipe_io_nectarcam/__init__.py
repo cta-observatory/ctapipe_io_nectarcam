@@ -482,9 +482,6 @@ class LightNectarCAMEventSource(EventSource):
         self.run_start = Time(self.camera_config.date, format='unix')
         self.geometry_version = 3
         self._subarray = self.create_subarray(self.geometry_version, self.tel_id)
-        self.r0_r1_calibrator = NectarCAMR0Corrections(
-             subarray=self._subarray, parent=self
-         )
         self.nectarcam_service = self.fill_nectarcam_service_container_from_zfile(self.tel_id,
                                                                                   self.camera_config)
 
@@ -534,8 +531,6 @@ class LightNectarCAMEventSource(EventSource):
 
     @property
     def datalevels(self):
-        if self.r0_r1_calibrator.calibration_path is not None:
-            return (DataLevel.R0, DataLevel.R1)
         return (DataLevel.R0,)
 
     @property
@@ -859,6 +854,15 @@ class LightNectarCAMEventSource(EventSource):
 class NectarCAMEventSource(LightNectarCAMEventSource):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.r0_r1_calibrator = NectarCAMR0Corrections(
+            subarray=self._subarray, parent=self
+        )
+
+    @property
+    def datalevels(self):
+        if self.r0_r1_calibrator.calibration_path is not None:
+            return (DataLevel.R0, DataLevel.R1)
+        return (DataLevel.R0,)
 
     def _generator(self):
 
