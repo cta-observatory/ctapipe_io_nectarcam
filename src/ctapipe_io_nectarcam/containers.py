@@ -15,8 +15,8 @@ class NectarCAMDataStreamContainer(Container):
     Container for the Fields that are from the DataStream information (new from v6)
     """
     telescope_id = Field(-1,"telescope id")
-    sb_id = Field(-1,"No idea what this is")
-    obs_id = Field(-1,"I suppose this should be the run number but the number does not correspond")
+    sb_id = Field(-1,"Scheduling block ID")
+    obs_id = Field(-1,"Observation ID")
     waveform_scale = Field(1.,"Scaling factor to apply to the waveform data from the EVB")
     waveform_offset = Field(0.,"Offset to apply to the waveform data from the EVB")
 

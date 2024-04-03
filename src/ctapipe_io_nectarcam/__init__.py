@@ -5,6 +5,7 @@ EventSource for NectarCAM protobuf-fits.fz-files.
 Needs protozfits v1.5.0 from github.com/cta-sst-1m/protozfitsreader
 """
 
+import os
 import glob
 import numpy as np
 import struct
@@ -13,7 +14,7 @@ from astropy.io import fits
 from astropy.time import Time
 from ctapipe.containers import (
     PixelStatusContainer, EventType, R0CameraContainer, R1CameraContainer,
-    CoordinateFrameType, PointingMode, SchedulingBlockContainer, ObservationBlockContainer, # VIM : line of things in lst equivalent
+    CoordinateFrameType, PointingMode, SchedulingBlockContainer, ObservationBlockContainer,
 )
 from ctapipe.coordinates import CameraFrame
 from ctapipe.core import Provenance
@@ -45,8 +46,6 @@ from .anyarray_dtypes import (
     TIB_DTYPE,
 )
 from .version import __version__
-
-from IPython import embed
 
 __all__ = ['NectarCAMEventSource', '__version__']
 
@@ -435,8 +434,22 @@ class NectarCAMEventSource(EventSource):
         help='If True, flat field and pedestal events are also calibrated.'
     ).tag(config=True)
 
+    skip_empty_events = Bool(
+        default_value=True,
+        help="If True, remove the empty events from the analysis (not loading information from them)."
+    )
+
+    show_empty_stats = Bool(
+        default_value=False,
+        help="If True, show statistics on the empty events that were present in file (only if empty events are skipped)"
+    ).tag(config=True)
+
+
     def _correct_tel_id(self,tel_id,run):
         if run>=5047 and run<=5085 and tel_id==14:
+            # For the first data with EVB v6, the Telescope ID was set to 14 in the config
+            # but many other code (like monitoring script) expect tel_id at 0 (hardcoded)
+            # so apply a correction to be sure that data are consistent for this data range
             print(f"Correcting Telescope ID from {tel_id} to 0")
             cor_tel_id = 0 
         else:
@@ -485,7 +498,7 @@ class NectarCAMEventSource(EventSource):
             super().__init__(**kwargs)
             self.file_list = [self.input_url]
 
-        self.multi_file = MultiFiles(self.file_list)
+        self.multi_file = MultiFiles(self.file_list, self.skip_empty_events)
         self._pre_v6_data = self.multi_file._pre_v6_file
         self.camera_config = self.multi_file.camera_config
         self.log.info("Read {} input files".format(self.multi_file.num_inputs()))
@@ -518,6 +531,7 @@ class NectarCAMEventSource(EventSource):
         #        target_info["subarray_pointing_frame"] = CoordinateFrameType.ICRS
         #        pointing_mode = PointingMode.TRACK
 
+        #TODO: Transfer the sb_id from the self.nectarcam_datastream when it will be meaningful
         self._scheduling_blocks = {
             self.run_id: SchedulingBlockContainer(
                 sb_id=np.uint64(self.run_id),
@@ -526,6 +540,7 @@ class NectarCAMEventSource(EventSource):
             )
         }
 
+        #TODO: Transfer the sb_id and obs_id from the self.nectarcam_datastream when it will be meaningful
         self._observation_blocks = {
             self.run_id: ObservationBlockContainer(
                 obs_id=np.uint64(self.run_id),
@@ -623,7 +638,6 @@ class NectarCAMEventSource(EventSource):
         # change it to run_id from nectarcam_service (new) as camera_config_id is not the same as in pre_v6 data
         return [self.nectarcam_service.run_id,]
     def _generator(self):
-
         # container for NectarCAM data
         array_event = NectarCAMDataContainer()
         array_event.meta['input_url'] = self.input_url
@@ -639,19 +653,13 @@ class NectarCAMEventSource(EventSource):
 
         # loop on events
         for count, event in enumerate(self.multi_file):
-
             array_event.count = count
             array_event.index.event_id = event.event_id
             array_event.index.obs_id = self.obs_ids[0]
 
             # fill R0/R1 data
             self.fill_r0r1_container(array_event, event) ## svc or use self.nectarcam_service
-            
-            # bad_event = array_event.r0.tel[self.tel_id].waveform is None and array_event.r1.tel[self.tel_id].waveform is None
-            # if bad_event:
-            #     yield array_event
-
-            # fill specific NectarCAM event data
+    
             # fill specific NectarCAM event data
             self.fill_nectarcam_event_container_from_zfile(array_event, event)
 
@@ -668,11 +676,13 @@ class NectarCAMEventSource(EventSource):
                 if (
                         self.calibrate_flatfields_and_pedestals
                         or array_event.trigger.event_type not in {EventType.FLATFIELD,
-                                                                  EventType.SKY_PEDESTAL}
+                                                                EventType.SKY_PEDESTAL}
                 ):
                     self.r0_r1_calibrator.calibrate(array_event)
 
             yield array_event
+        if self.show_empty_stats:
+            self.multi_file.show_empty_stats()
 
     @staticmethod
     def is_compatible(file_path):
@@ -708,6 +718,7 @@ class NectarCAMEventSource(EventSource):
         """
         Fill NectarCAM DataStream container with specific NectarCAM data stream data 
         (from DataStream object) in the zfits file
+        
         """
         ncdst = NectarCAMDataStreamContainer(telescope_id=tel_id)
 
@@ -869,13 +880,10 @@ class NectarCAMEventSource(EventSource):
                 trigger_bits = nectarcam.evt.ucts_trigger_type
             else:
                 trigger_bits = nectarcam.evt.tib_masked_trigger
-
         elif tib_available:
             trigger_bits = nectarcam.evt.tib_masked_trigger
-
         elif ucts_available:
             trigger_bits = nectarcam.evt.ucts_trigger_type
-
         else:
             self.log.warning('No trigger info available.')
             trigger.event_type = EventType.UNKNOWN
@@ -986,54 +994,6 @@ class NectarCAMEventSource(EventSource):
         if not self.pre_v6_data:
             event_container.first_cell_id = np.full( (N_PIXELS,), -1, dtype=event.first_cell_id.dtype)
             event_container.first_cell_id[ self.nectarcam_service.pixel_ids ] = event.first_cell_id
-        #embed()
-#### I AM HERE ON 8 MARCH 2024
-            
-        # # Unpack absolute event ID
-        # event_container.feb_abs_event_id[
-        #     self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[0::n_fields]
-        # # Unpack PPS counter
-        # event_container.feb_pps_cnt[
-        #     self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[1::n_fields]
-        # # Unpack relative event ID
-        # event_container.feb_event_id[
-        #     self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[2::n_fields]
-        # # Unpack TS1 counter
-        # event_container.feb_ts1[
-        #     self.camera_config.nectarcam.expected_modules_id] = unpacked_feb[3::n_fields]
-        # # Unpack TS2 counters
-        # ts2_decimal = lambda bits: bits - (1 << 8) if bits & 0x80 != 0 else bits
-        # ts2_decimal_vec = np.vectorize(ts2_decimal)
-        # event_container.feb_ts2_trig[
-        #     self.camera_config.nectarcam.expected_modules_id] = ts2_decimal_vec(
-        #     unpacked_feb[4::n_fields])
-        # event_container.feb_ts2_pps[
-        #     self.camera_config.nectarcam.expected_modules_id] = ts2_decimal_vec(
-        #     unpacked_feb[5::n_fields])
-        # # Loop over modules
-        # for module_idx, module_id in enumerate(
-        #         self.camera_config.nectarcam.expected_modules_id):
-        #     offset = module_id * 7
-        #     if bytes_per_module > 16:
-        #         field_id = 8
-        #         # Decode trigger pattern
-        #         for pattern_id in range(n_patterns):
-        #             value = unpacked_feb[n_fields * module_idx + field_id + pattern_id]
-        #             module_pattern = [int(digit) for digit in
-        #                               reversed(bin(value)[2:].zfill(7))]
-        #             event_container.trigger_pattern[pattern_id,
-        #             offset:offset + 7] = module_pattern
-
-        # # Unpack native charge
-        # if len(event.nectarcam.charges_gain1) > 0:
-        #     event_container.native_charge = np.zeros(shape=(N_GAINS, N_PIXELS),
-        #                                              dtype=np.uint16)
-        #     rec_fmt = '=' + 'H' * self.camera_config.num_pixels
-        #     for gain_id in range(N_GAINS):
-        #         unpacked_charge = struct.unpack(rec_fmt, getattr(event.nectarcam,
-        #                                                          f'charges_gain{gain_id + 1}'))
-        #         event_container.native_charge[
-        #             gain_id, self.camera_config.expected_pixels_id] = unpacked_charge
 
     def fill_r0r1_camera_container(self, zfits_event):
         """
@@ -1053,11 +1013,6 @@ class NectarCAMEventSource(EventSource):
         has_low_gain = (zfits_event.pixel_status & PixelStatus.LOW_GAIN_STORED).astype(bool)
         has_high_gain = (zfits_event.pixel_status & PixelStatus.HIGH_GAIN_STORED).astype(bool)
         not_broken = (has_low_gain | has_high_gain).astype(bool)
-        all_broken = np.count_nonzero(has_low_gain) == 0 and np.count_nonzero(has_high_gain) == 0
-        
-        # all_broken is likely because of the issue : 
-        # https://redmine.cta-observatory.org/issues/52457 
-        # so it could be a way to discriminate
 
         # broken pixels have both false, so gain selected means checking
         # if there are any pixels where exactly one of high or low gain is stored
@@ -1077,14 +1032,8 @@ class NectarCAMEventSource(EventSource):
         # we assume that either all pixels are gain selected or none
         # only broken pixels are allowed to be missing completely
 
-        # if all_broken:
-        #     #print("WARNING> This event has a problem --> Likely a default event (cf: https://redmine.cta-observatory.org/issues/52457)")
-        #     ## Create a dummy event
-        #     r0 = R0CameraContainer()
-        #     r1 = R1CameraContainer()
-        # elif gain_selected:
         if gain_selected:
-            print("GAIN SELECTED")
+            #print("GAIN SELECTED")
             selected_gain = np.where(has_high_gain, 0, 1)
             waveform = np.full((n_pixels, n_samples), fill, dtype=dtype) # VIM : Replace full by empty ?
             waveform[not_broken] = zfits_event.waveform.reshape((-1, n_samples))
@@ -1109,7 +1058,7 @@ class NectarCAMEventSource(EventSource):
             r0 = R0CameraContainer(waveform=reordered_waveform)
             r1 = R1CameraContainer()
 
-        if not all_broken and not self.pre_v6_data:
+        if not self.pre_v6_data:
             if r0.waveform is not None:
                 r0.waveform = (r0.waveform - self.nectarcam_datastream.waveform_offset)/self.nectarcam_datastream.waveform_scale
             if r1.waveform is not None:
@@ -1165,7 +1114,7 @@ class MultiFiles:
     the event_id order
     """
 
-    def __init__(self, file_list):
+    def __init__(self, file_list, skip_empty_events):
 
         self._file = {}
         self._events = {}
@@ -1175,6 +1124,8 @@ class MultiFiles:
         self.camera_config = None
         self.camera_datastream = None
         self._pre_v6_file = True
+        self._empty_per_file = dict()
+        self._skip_empty_events = skip_empty_events
 
         paths = []
         for file_name in file_list:
@@ -1193,10 +1144,10 @@ class MultiFiles:
 
                 # verify where the CameraConfig is present
                 if 'CameraConfig' in self._file[path].__dict__.keys():
-                    #print("Reading Old File")
+                    # File before EVB v6 
                     self._camera_config[path] = next(self._file[path].CameraConfig)
                 elif 'CameraConfiguration' in self._file[path].__dict__.keys():
-                    #print("Reading New File")
+                    # File after EVB v6
                     self._pre_v6_file = False
                     self._camera_config[path] = next(self._file[path].CameraConfiguration)
                     self._camera_datastream[path] = next(self._file[path].DataStream)
@@ -1215,6 +1166,16 @@ class MultiFiles:
         # verify that somewhere the CameraConfing is present
         assert (self.camera_config)
 
+
+    def show_empty_stats(self):
+        tot_zeros  = sum( self._empty_per_file.values() )
+        tot_events = self.__len__()
+        print(f"Empty events : {tot_zeros}/{tot_events} --> {100.*tot_zeros/tot_events:.2f} %")
+        #print("Files with empty events: ")
+        #for k, v in self._empty_per_file.items():
+        #    print(f'{os.path.basename(k)} : {v} empty events')
+
+        
     def __iter__(self):
         return self
 
@@ -1226,9 +1187,32 @@ class MultiFiles:
         if not self._events:
             raise StopIteration
 
+        if self._skip_empty_events:
+            # Attempt to skip the zero events
+            # Loop on all files. If there is an event_id at 0, then loop until there is one with a "normal id"
+            # Once done, go back to the normal behavior
+            # TODO : Think of a way to do it in on one pass over the files 
+            files_with_zero = [ k for k, v in self._events.items() if v.event_id == 0 ]
+            for f in files_with_zero:
+                # next until we find an event that is not 0
+                try:
+                    while self._events[f].event_id == 0:
+                        if f not in self._empty_per_file:
+                            self._empty_per_file[f] = 0
+                        self._empty_per_file[f] += 1
+                        self._events[f] = next(self._file[f].Events)
+                except StopIteration:
+                    # We have ended the file, remove it from the list so we don't iterate/look at it anymore
+                    del self._events[f]
+
+        if len(self._events) == 0 :
+            raise StopIteration
+
+
         min_path = min(
             self._events.items(),
-            key=lambda item: item[1].event_id,
+            key=lambda item: item[1].event_id, 
+            #biggest value for signed int on 64 bit (should be ok)
         )[0]
 
         # return the minimal event id
@@ -1249,3 +1233,8 @@ class MultiFiles:
 
     def num_inputs(self):
         return len(self._file)
+    
+    def get_empty_entries(self):
+        # Compute the number of empty events. This is complete only once we've looped on all events
+        return sum( self._empty_per_file.values() )
+
