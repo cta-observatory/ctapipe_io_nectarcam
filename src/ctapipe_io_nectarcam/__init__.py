@@ -552,10 +552,10 @@ class NectarCAMEventSource(EventSource):
         }
 
     def get_entries(self):
-        tot_events = 0
-        for v in self.multi_file._events_table.values():
-            tot_events += len(v)
-        return tot_events
+        return len(self.multi_file)
+    
+    def get_empty_entries(self):
+        return self.multi_file.get_empty_entries()
 
     def __len__(self):
         return self.get_entries()
@@ -1170,7 +1170,7 @@ class MultiFiles:
     def show_empty_stats(self):
         tot_zeros  = sum( self._empty_per_file.values() )
         tot_events = self.__len__()
-        print(f"Empty events : {tot_zeros}/{tot_events} --> {100.*tot_zeros/tot_events:.2f} %")
+        print(f"WARNING> Empty events : {tot_zeros}/{tot_events} --> {100.*tot_zeros/tot_events:.2f} %")
         #print("Files with empty events: ")
         #for k, v in self._empty_per_file.items():
         #    print(f'{os.path.basename(k)} : {v} empty events')
