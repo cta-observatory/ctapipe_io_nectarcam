@@ -745,8 +745,11 @@ class NectarCAMEventSource(EventSource):
                 is_nectarcam_file = False
         if not is_nectarcam_file:
             # The last resort... Very ugly and likely won't work for non test bench data !!!!!!!
-            if h['TARGET'] == 'NectarCAM':
-                is_nectarcam_file = True
+            try:
+                if h['TARGET'] == 'NectarCAM':
+                    is_nectarcam_file = True
+            except IndexError as err:
+                is_nectarcam_file = False
         return is_protobuf_zfits_file & is_nectarcam_file
 
     @staticmethod
