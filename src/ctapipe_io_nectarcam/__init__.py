@@ -6,6 +6,7 @@ Needs protozfits v1.5.0 from github.com/cta-sst-1m/protozfitsreader
 """
 
 import os
+import re
 import glob
 import numpy as np
 import struct
@@ -687,10 +688,20 @@ class NectarCAMEventSource(EventSource):
     @staticmethod
     def is_compatible(file_path):
         try:
-            # The file contains two tables:
+            # The file contains two tables for EVB v5:
             #  1: CameraConfig
             #  2: Events
-            h = fits.open(file_path)[2].header
+            # and 3 for EVB v6:
+            #  1: DataStream
+            #  2: CameraConfiguration
+            #  3: Events
+            # Modification for EVB v6 --> Going to search for the Events table
+            ffiles = fits.open(file_path)
+            event_names = ['Events']
+            for i in range(1,len(ffiles)): # start at 1 to avoid the PrimaryHDU
+                h = ffiles[i].header
+                if h['EXTNAME'] in event_names:
+                    break
             ttypes = [
                 h[x] for x in h.keys() if 'TTYPE' in x
             ]
@@ -707,10 +718,35 @@ class NectarCAMEventSource(EventSource):
                 (h['EXTNAME'] == 'Events') and
                 (h['ZTABLE'] is True) and
                 (h['ORIGIN'] == 'CTA') and
-                (h['PBFHEAD'] == 'R1.CameraEvent')
+                (h['PBFHEAD'] == 'R1.CameraEvent' or h['PBFHEAD'] == 'CTAR1.Event') # The latter is from EVBv6
         )
 
         is_nectarcam_file = 'nectarcam_counters' in ttypes
+        if not is_nectarcam_file:
+            # We might have a EVB v6 file, so let's try EVBv6
+            # EVBv6 format is similar to the one of LST... hard to distinguish... :-(
+            # I know that LST has 40 sample readout and NectarCAM 60 so use I'll use this
+            try:
+                nFields = int(h['TFIELDS'])
+                nWaveformBins = None
+                nPixels = None
+                for i in range(nFields):
+                    field = i+1 # fields starts at 1
+                    if h[f'TTYPE{field}'] == 'waveform':
+                        #ZFORM has letter to express the type, e.g  ZFORM11 = '221760I' --> remove them
+                        nWaveformBins = int( re.sub("[^0-9]", "", h[f'ZFORM{field}']) )
+                    if h[f'TTYPE{field}'] == 'pixel_status':
+                        nPixels = int(  re.sub("[^0-9]", "", h[f'ZFORM{field}']) )
+                sample_per_pixel = nWaveformBins/nPixels
+                is_nectarcam_file = sample_per_pixel == 120. or sample_per_pixel == 60.
+                # 120 is for the case 2 channel are stored
+                # 60 is for the case 1 channel is stored (gain selection applied)
+            except (IndexError, TypeError, ValueError) as err:
+                is_nectarcam_file = False
+        if not is_nectarcam_file:
+            # The last resort... Very ugly and likely won't work for non test bench data !!!!!!!
+            if h['TARGET'] == 'NectarCAM':
+                is_nectarcam_file = True
         return is_protobuf_zfits_file & is_nectarcam_file
 
     @staticmethod
@@ -994,6 +1030,7 @@ class NectarCAMEventSource(EventSource):
         if not self.pre_v6_data:
             event_container.first_cell_id = np.full( (N_PIXELS,), -1, dtype=event.first_cell_id.dtype)
             event_container.first_cell_id[ self.nectarcam_service.pixel_ids ] = event.first_cell_id
+
 
     def fill_r0r1_camera_container(self, zfits_event):
         """
