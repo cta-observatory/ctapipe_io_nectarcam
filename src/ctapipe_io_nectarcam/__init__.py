@@ -553,7 +553,9 @@ class NectarCAMEventSource(EventSource):
         }
 
     def get_entries(self):
-        return len(self.multi_file)
+        n_total =  len(self.multi_file)
+        n = n_total if self.max_events is None else min( n_total, self.max_events)
+        return n
     
     def get_empty_entries(self):
         return self.multi_file.get_empty_entries()
