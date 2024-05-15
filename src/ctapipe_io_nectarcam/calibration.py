@@ -166,10 +166,6 @@ class NectarCAMR0Corrections(TelescopeComponent):
                 mon.tel[tel_id] = MonitoringCameraContainer(
                     calibration=next(h5_table.read(f'/tel_{tel_id}/calibration', WaveformCalibrationContainer)),
                     flatfield=next(h5_table.read(f'/tel_{tel_id}/flatfield', FlatFieldContainer)),
-                    #calibration=next(h5_table.read(f'/tel_{tel_id_hack}/calibration', WaveformCalibrationContainer)),
-                    #flatfield=next(h5_table.read(f'/tel_{tel_id_hack}/flatfield', FlatFieldContainer)),
-                    #pedestal=next(h5_table.read(f'/{base}/pedestal', PedestalContainer)),
-                    #pixel_status=next(h5_table.read(f"/{base}/pixel_status", PixelStatusContainer)),
                 )
 
         return mon
