@@ -1263,6 +1263,32 @@ class NectarCAMEventSource(EventSource):
         status_container.hardware_failing_pixels[:] = pixel_status == 0
 
 
+
+class LightNectarCAMEventSource(NectarCAMEventSource):
+    """
+    EventSource for NectarCam r0 data.
+    Lighter version of the NectarCAMEventSource class but without FEB data nor gain selection.
+    """
+    def __init__(self,**kwargs):
+
+        if self.config is None:
+            self.config = Config()
+        self.config.NectarCAMEventSource.NectarCAMR0Corrections.calibration_path = None
+        self.config.NectarCAMEventSource.NectarCAMR0Corrections.apply_flatfield = False
+        self.config.NectarCAMEventSource.NectarCAMR0Corrections.select_gain = False
+        self.load_feb_info = False
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def is_compatible(file_path):
+        '''
+        This version should only be called directly so return False 
+        such that it is not used when using EventSource
+        '''
+        return False
+
+
+
 class MultiFiles:
     """
     This class open all the files in file_list and read the events following
@@ -1398,27 +1424,5 @@ class MultiFiles:
 
 
 
-class LightNectarCAMEventSource(NectarCAMEventSource):
-    """
-    EventSource for NectarCam r0 data.
-    Lighter version of the NectarCAMEventSource class but without monitoring data nor gain selection.
-    """
-    def __init__(self,**kwargs):
-
-        if self.config is None:
-            self.config = Config()
-        self.config.NectarCAMEventSource.NectarCAMR0Corrections.calibration_path = None
-        self.config.NectarCAMEventSource.NectarCAMR0Corrections.apply_flatfield = False
-        self.config.NectarCAMEventSource.NectarCAMR0Corrections.select_gain = False
-        self.load_feb_info = False
-        super().__init__(**kwargs)
-
-    @staticmethod
-    def is_compatible(file_path):
-        '''
-        This version should only be called directly so return False 
-        such that it is not used when using EventSource.
-        '''
-        return False
 
 
