@@ -945,6 +945,14 @@ class NectarCAMEventSource(EventSource):
             event_container.ucts_num_in_bunch = unpacked_cdts[9]  # new
             event_container.cdts_version = unpacked_cdts[10]  # new
 
+        if not self.pre_v6_data:
+            event_container.first_cell_id = np.full(
+                (N_PIXELS,), -1, dtype=event.first_cell_id.dtype
+            )
+            event_container.first_cell_id[
+                self.nectarcam_service.pixel_ids
+            ] = event.first_cell_id
+
         # Unpack FEB counters and trigger pattern
         self.unpack_feb_data(event_container, event, nectarcam_data)
 
@@ -1105,14 +1113,6 @@ class NectarCAMEventSource(EventSource):
                 event_container.native_charge[
                     gain_id, self.nectarcam_service.pixel_ids
                 ] = unpacked_charge
-
-        if not self.pre_v6_data:
-            event_container.first_cell_id = np.full(
-                (N_PIXELS,), -1, dtype=event.first_cell_id.dtype
-            )
-            event_container.first_cell_id[
-                self.nectarcam_service.pixel_ids
-            ] = event.first_cell_id
 
     def fill_r0r1_camera_container(self, zfits_event):
         """
