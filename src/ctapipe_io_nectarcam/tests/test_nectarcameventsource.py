@@ -92,9 +92,16 @@ def test_v6_identification():
 def test_is_compatible():
     from ctapipe_io_nectarcam import LightNectarCAMEventSource, NectarCAMEventSource
 
-    for event_source in [NectarCAMEventSource, LightNectarCAMEventSource]:
-        for example_file_path in EXAMPLE_FILE_PATHS:
-            assert event_source.is_compatible(example_file_path)
+    for example_file_path in EXAMPLE_FILE_PATHS:
+        assert NectarCAMEventSource.is_compatible(example_file_path)
+    
+    for example_file_path in EXAMPLE_FILE_PATHS:
+        assert LightNectarCAMEventSource.is_compatible(example_file_path) == False
+    
+
+#    for event_source in [NectarCAMEventSource, LightNectarCAMEventSource]:
+#        for example_file_path in EXAMPLE_FILE_PATHS:
+#            assert event_source.is_compatible(example_file_path)
 
 
 def test_factory_for_nectarcam_file():
@@ -105,9 +112,9 @@ def test_factory_for_nectarcam_file():
 
         # explicit import after event_source, to test if this
         # package is detected by ctapipe
-        from ctapipe_io_nectarcam import LightNectarCAMEventSource
+        from ctapipe_io_nectarcam import NectarCAMEventSource
 
-        assert isinstance(reader, LightNectarCAMEventSource)
+        assert isinstance(reader, NectarCAMEventSource)
 
 
 def test_subarray():
