@@ -48,6 +48,9 @@ from .containers import (
     NectarCAMEventContainer,
     NectarCAMServiceContainer,
 )
+
+from traitlets.config import Config
+
 from .version import __version__
 
 __all__ = ["LightNectarCAMEventSource", "NectarCAMEventSource", "__version__"]
@@ -471,6 +474,11 @@ class NectarCAMEventSource(EventSource):
         "(only if empty events are skipped)",
     ).tag(config=True)
 
+    load_feb_info = Bool(
+        default_value=True,
+        help="If False, skip the decoding of FEB info"
+    )
+
     def _correct_tel_id(self, tel_id, run):
         if run >= 5047 and run <= 5085 and tel_id == 14:
             # For the first data with EVB v6, the Telescope ID was set to 14 in the
@@ -504,7 +512,6 @@ class NectarCAMEventSource(EventSource):
         # EventSource can not handle file wild cards as input_url
         # To overcome this we substitute the input_url with first file matching
         # the specified file mask (copied from  MAGICEventSourceROOT).
-
         if "input_url" in kwargs.keys():
             self.file_list = glob.glob(str(kwargs["input_url"]))
             self.file_list.sort()
@@ -945,8 +952,18 @@ class NectarCAMEventSource(EventSource):
             event_container.ucts_num_in_bunch = unpacked_cdts[9]  # new
             event_container.cdts_version = unpacked_cdts[10]  # new
 
+
+        if not self.pre_v6_data:
+            event_container.first_cell_id = np.full(
+                (N_PIXELS,), -1, dtype=event.first_cell_id.dtype
+            )
+            event_container.first_cell_id[
+                self.nectarcam_service.pixel_ids
+            ] = event.first_cell_id
+
         # Unpack FEB counters and trigger pattern
-        self.unpack_feb_data(event_container, event, nectarcam_data)
+        if self.load_feb_info:
+            self.unpack_feb_data(event_container, event, nectarcam_data)
 
     def fill_trigger_info(self, array_event):
         tel_id = self.tel_id
@@ -1105,14 +1122,6 @@ class NectarCAMEventSource(EventSource):
                 event_container.native_charge[
                     gain_id, self.nectarcam_service.pixel_ids
                 ] = unpacked_charge
-
-        if not self.pre_v6_data:
-            event_container.first_cell_id = np.full(
-                (N_PIXELS,), -1, dtype=event.first_cell_id.dtype
-            )
-            event_container.first_cell_id[
-                self.nectarcam_service.pixel_ids
-            ] = event.first_cell_id
 
     def fill_r0r1_camera_container(self, zfits_event):
         """
@@ -1386,3 +1395,30 @@ class MultiFiles:
         # Compute the number of empty events. This is complete only once we've looped
         # on all events
         return sum(self._empty_per_file.values())
+
+
+
+class LightNectarCAMEventSource(NectarCAMEventSource):
+    """
+    EventSource for NectarCam r0 data.
+    Lighter version of the NectarCAMEventSource class but without monitoring data nor gain selection.
+    """
+    def __init__(self,**kwargs):
+
+        if self.config is None:
+            self.config = Config()
+        self.config.NectarCAMEventSource.NectarCAMR0Corrections.calibration_path = None
+        self.config.NectarCAMEventSource.NectarCAMR0Corrections.apply_flatfield = False
+        self.config.NectarCAMEventSource.NectarCAMR0Corrections.select_gain = False
+        self.load_feb_info = False
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def is_compatible(file_path):
+        '''
+        This version should only be called directly so return False 
+        such that it is not used when using EventSource.
+        '''
+        return False
+
+
