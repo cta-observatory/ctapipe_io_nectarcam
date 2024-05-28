@@ -10,6 +10,15 @@ __all__ = [
     'NectarCAMCameraContainer',
 ]
 
+class NectarCAMDataStreamContainer(Container):
+    """
+    Container for the Fields that are from the DataStream information (new from v6)
+    """
+    telescope_id = Field(-1,"telescope id")
+    sb_id = Field(-1,"Scheduling block ID")
+    obs_id = Field(-1,"Observation ID")
+    waveform_scale = Field(1.,"Scaling factor to apply to the waveform data from the EVB")
+    waveform_offset = Field(0.,"Offset to apply to the waveform data from the EVB")
 
 class NectarCAMServiceContainer(Container):
     """
@@ -33,6 +42,17 @@ class NectarCAMServiceContainer(Container):
     # pre_proc_algorithms = Field(None, "pre processing algorithms")
     module_ids = Field([], "module ids")
     num_modules = Field(-1, "number of modules")
+    ## Add new fields for the EVB v6 :
+    num_channels = Field(-1, "number of channels")
+    calibration_service_id = Field(-1,"calibration service id")
+    tdp_type = Field([],"tdp type")
+    tdp_action = Field([],"tdp action")
+    ttype_pattern = Field([],"tdp type")
+
+    run_id = Field(-1,"run number")
+
+
+
 
 
 class NectarCAMEventContainer(Container):
@@ -83,6 +103,9 @@ class NectarCAMEventContainer(Container):
     trigger_pattern =  Field(None, "FEB L0 trigger pattern")
     native_charge = Field(None, "FEB native charge")
 
+    # new in v6
+    first_cell_id = Field(None,'ID of the first NECTAr read cell')
+
 class NectarCAMCameraContainer(Container):
     """
     Container for Fields that are specific to each NectarCAM camera
@@ -90,6 +113,7 @@ class NectarCAMCameraContainer(Container):
     evt = Field(NectarCAMEventContainer(), "NectarCAM specific event Information")
     svc = Field(NectarCAMServiceContainer(), "NectarCAM specific camera_config "
                                              "Information")
+    dst = Field(NectarCAMDataStreamContainer(), "NectarCAM specific datastream Information")
 
 
 class NectarCAMContainer(Container):

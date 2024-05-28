@@ -91,10 +91,11 @@ class NectarCAMR0Corrections(TelescopeComponent):
             r1 = event.r1.tel[tel_id]
             # check if waveform is already filled
             if r1.waveform is None:
-                r1.waveform = event.r0.tel[tel_id].waveform
+                r1.waveform = event.r0.tel[tel_id].waveform.copy()
+                # Force a copy as v6 have waveform as float 
+                # so in this case r0 == r1 (in memory)
 
             r1.waveform = r1.waveform.astype(np.float32, copy=False)
-
             # do gain selection before converting to pe
             # like eventbuilder will do
             if self.select_gain and r1.selected_gain_channel is None:
@@ -103,6 +104,7 @@ class NectarCAMR0Corrections(TelescopeComponent):
 
             # apply monitoring data corrections,
             # subtract pedestal per sample and convert to pe
+
             if self.mon_data is not None:
                 calibration = self.mon_data.tel[tel_id].calibration
                 # pedestal subtraction and gain correction
@@ -159,21 +161,18 @@ class NectarCAMR0Corrections(TelescopeComponent):
                 int(key[4:]) for key in f.root._v_children.keys()
                 if key.startswith('tel_')
             ]
-
         for tel_id in tel_ids:
             with HDF5TableReader(path) as h5_table:
-
                 mon.tel[tel_id] = MonitoringCameraContainer(
                     calibration=next(h5_table.read(f'/tel_{tel_id}/calibration', WaveformCalibrationContainer)),
                     flatfield=next(h5_table.read(f'/tel_{tel_id}/flatfield', FlatFieldContainer)),
-                    #pedestal=next(h5_table.read(f'/{base}/pedestal', PedestalContainer)),
-                    #pixel_status=next(h5_table.read(f"/{base}/pixel_status", PixelStatusContainer)),
                 )
 
         return mon
 
 
 def convert_to_pe(waveform, calibration, selected_gain_channel):
+
     if selected_gain_channel is None:
         waveform -= calibration.pedestal_per_sample
         waveform *= calibration.dc_to_pe[:, :, np.newaxis]
