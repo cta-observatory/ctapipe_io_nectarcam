@@ -51,42 +51,46 @@ def test_loop_over_events():
 
 
 def test_length():
-    from ctapipe_io_nectarcam import NectarCAMEventSource
+    from ctapipe_io_nectarcam import LightNectarCAMEventSource, NectarCAMEventSource
 
-    for example_file_path, total_event in zip(EXAMPLE_FILE_PATHS, TOTAL_EVENTS):
-        inputfile_reader = NectarCAMEventSource(input_url=example_file_path)
-        assert len(inputfile_reader) == total_event
-        assert inputfile_reader.get_entries() == total_event
+    for event_source in [NectarCAMEventSource, LightNectarCAMEventSource]:
+        for example_file_path, total_event in zip(EXAMPLE_FILE_PATHS, TOTAL_EVENTS):
+            inputfile_reader = event_source(input_url=example_file_path)
+            assert len(inputfile_reader) == total_event
+            assert inputfile_reader.get_entries() == total_event
 
 
 def test_length_with_limit():
-    from ctapipe_io_nectarcam import NectarCAMEventSource
+    from ctapipe_io_nectarcam import LightNectarCAMEventSource, NectarCAMEventSource
 
     n_events = 10
-    for example_file_path in EXAMPLE_FILE_PATHS:
-        inputfile_reader = NectarCAMEventSource(
-            input_url=example_file_path, max_events=n_events
-        )
-        assert len(inputfile_reader) == 10
-        assert inputfile_reader.get_entries() == 10
+    for event_source in [NectarCAMEventSource, LightNectarCAMEventSource]:
+        for example_file_path in EXAMPLE_FILE_PATHS:
+            inputfile_reader = event_source(
+                input_url=example_file_path, max_events=n_events
+            )
+            assert len(inputfile_reader) == n_events
+            assert inputfile_reader.get_entries() == n_events
 
 
 def test_identification():
-    from ctapipe_io_nectarcam import NectarCAMEventSource
+    from ctapipe_io_nectarcam import LightNectarCAMEventSource, NectarCAMEventSource
 
-    inputfile_reader = NectarCAMEventSource(
-        input_url=EXAMPLE_FILE_PATH,
-    )
-    assert inputfile_reader.pre_v6_data == True
+    for event_source in [NectarCAMEventSource, LightNectarCAMEventSource]:
+        inputfile_reader = event_source(
+            input_url=EXAMPLE_FILE_PATH,
+        )
+        assert inputfile_reader.pre_v6_data == True
 
 
 def test_v6_identification():
-    from ctapipe_io_nectarcam import NectarCAMEventSource
+    from ctapipe_io_nectarcam import LightNectarCAMEventSource, NectarCAMEventSource
 
-    inputfile_reader = NectarCAMEventSource(
-        input_url=EXAMPLE_FILE_PATH_V6,
-    )
-    assert inputfile_reader.pre_v6_data == False
+    for event_source in [NectarCAMEventSource, LightNectarCAMEventSource]:
+        inputfile_reader = event_source(
+            input_url=EXAMPLE_FILE_PATH_V6,
+        )
+        assert inputfile_reader.pre_v6_data == False
 
 
 def test_is_compatible():
@@ -94,14 +98,9 @@ def test_is_compatible():
 
     for example_file_path in EXAMPLE_FILE_PATHS:
         assert NectarCAMEventSource.is_compatible(example_file_path)
-    
+
     for example_file_path in EXAMPLE_FILE_PATHS:
         assert LightNectarCAMEventSource.is_compatible(example_file_path) == False
-    
-
-#    for event_source in [NectarCAMEventSource, LightNectarCAMEventSource]:
-#        for example_file_path in EXAMPLE_FILE_PATHS:
-#            assert event_source.is_compatible(example_file_path)
 
 
 def test_factory_for_nectarcam_file():
