@@ -45,6 +45,9 @@ all = [
     "ctapipe_io_nectarcam[test,dev]",
 ]
 
+[project.entry-points.ctapipe_io]
+NectarCAMEventSource = "ctapipe_io_nectarcam:NectarCAMEventSource"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 exclude = ["ctapipe_io_nectarcam._dev_version"]
