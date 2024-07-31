@@ -38,6 +38,7 @@ from ctapipe.instrument import (
 )
 from ctapipe.io import DataLevel, EventSource
 from pkg_resources import resource_filename
+from traitlets.config import Config
 
 from .anyarray_dtypes import CDTS_AFTER_37201_DTYPE, CDTS_BEFORE_37201_DTYPE, TIB_DTYPE
 from .calibration import NectarCAMR0Corrections
@@ -48,9 +49,6 @@ from .containers import (
     NectarCAMEventContainer,
     NectarCAMServiceContainer,
 )
-
-from traitlets.config import Config
-
 from .version import __version__
 
 __all__ = ["LightNectarCAMEventSource", "NectarCAMEventSource", "__version__"]
@@ -475,8 +473,7 @@ class NectarCAMEventSource(EventSource):
     ).tag(config=True)
 
     load_feb_info = Bool(
-        default_value=True,
-        help="If False, skip the decoding of FEB info"
+        default_value=True, help="If False, skip the decoding of FEB info"
     )
 
     def _correct_tel_id(self, tel_id, run):
@@ -493,7 +490,8 @@ class NectarCAMEventSource(EventSource):
 
     def __init__(self, **kwargs):
         """
-        Constructor
+        Constructor of the NectarCAMEventSource class.
+
         Parameters
         ----------
         config: traitlets.loader.Config
@@ -952,7 +950,6 @@ class NectarCAMEventSource(EventSource):
             event_container.ucts_num_in_bunch = unpacked_cdts[9]  # new
             event_container.cdts_version = unpacked_cdts[10]  # new
 
-
         if not self.pre_v6_data:
             event_container.first_cell_id = np.full(
                 (N_PIXELS,), -1, dtype=event.first_cell_id.dtype
@@ -1085,7 +1082,9 @@ class NectarCAMEventSource(EventSource):
             3::n_fields
         ]
         # Unpack TS2 counters
-        ts2_decimal = lambda bits: bits - (1 << 8) if bits & 0x80 != 0 else bits
+        ts2_decimal = (
+            lambda bits: bits - (1 << 8) if bits & 0x80 != 0 else bits
+        )  # noqa: E731
         ts2_decimal_vec = np.vectorize(ts2_decimal)
         event_container.feb_ts2_trig[
             self.nectarcam_service.module_ids
@@ -1263,14 +1262,14 @@ class NectarCAMEventSource(EventSource):
         status_container.hardware_failing_pixels[:] = pixel_status == 0
 
 
-
 class LightNectarCAMEventSource(NectarCAMEventSource):
     """
     EventSource for NectarCam r0 data.
-    Lighter version of the NectarCAMEventSource class but without FEB data nor gain selection.
+    Lighter version of the NectarCAMEventSource class but without FEB data nor gain
+    selection.
     """
-    def __init__(self,**kwargs):
 
+    def __init__(self, **kwargs):
         if self.config is None:
             self.config = Config()
         self.config.NectarCAMEventSource.NectarCAMR0Corrections.calibration_path = None
@@ -1281,12 +1280,11 @@ class LightNectarCAMEventSource(NectarCAMEventSource):
 
     @staticmethod
     def is_compatible(file_path):
-        '''
-        This version should only be called directly so return False 
+        """
+        This version should only be called directly so return False
         such that it is not used when using EventSource
-        '''
+        """
         return False
-
 
 
 class MultiFiles:
@@ -1421,8 +1419,3 @@ class MultiFiles:
         # Compute the number of empty events. This is complete only once we've looped
         # on all events
         return sum(self._empty_per_file.values())
-
-
-
-
-

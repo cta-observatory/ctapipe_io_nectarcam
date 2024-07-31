@@ -23,6 +23,7 @@ requires-python = ">=3.9"
 dependencies = [
     "ctapipe~=0.19",
     "protozfits",
+    "scipy==1.11.4",
 ]
 
 # needed for setuptools_scm, we don't define a static version
@@ -36,6 +37,7 @@ dynamic = ["version"]
 test = [
     "pytest",
     "pytest-cov",
+    "pytest-xdist",
 ]
 dev = [
     "setuptools_scm",
