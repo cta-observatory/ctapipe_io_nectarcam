@@ -23,6 +23,7 @@ requires-python = ">=3.9"
 dependencies = [
     "ctapipe~=0.19",
     "protozfits",
+    "scipy==1.11",
 ]
 
 # needed for setuptools_scm, we don't define a static version
