@@ -1294,9 +1294,22 @@ class LightNectarCAMEventSource(NectarCAMEventSource):
 
 class BlockNectarCAMEventSource:
     """
-    EventSource for long NectarCAMObservations
+    EventSource for long NectarCAMObservations or read specific part of the run.
+    The grouping is only done if the number of files is a multiple of the block_size.
+    It is also possible to analyse only certain blocks via the allowed_blocks argument.
+
+    The grouping has the advantage of not opening all files at the same time. 
+
     At the moment, it's a standalone class to have better control on what is done.
-    TODO : Study if it could inherit from EventSource., 
+    TODO : Study if it could inherit from EventSource.,
+
+    Input:
+        block_size: The number of file per group.
+            default: 4
+
+        allowed_blocks : id or list of id of block to analyse
+            default: None (all analysed)
+
     """
 
     def __init__(self,block_size=4,allowed_blocks=None,**kwargs):
