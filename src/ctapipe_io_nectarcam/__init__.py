@@ -49,6 +49,12 @@ from .containers import (
     NectarCAMEventContainer,
     NectarCAMServiceContainer,
 )
+
+from protozfits import File
+import types
+import os
+from collections.abc import Iterable
+
 from .version import __version__
 
 __all__ = ["LightNectarCAMEventSource", "NectarCAMEventSource", "__version__"]
@@ -1286,6 +1292,166 @@ class LightNectarCAMEventSource(NectarCAMEventSource):
         """
         return False
 
+class BlockNectarCAMEventSource:
+    """
+    EventSource for long NectarCAMObservations
+    At the moment, it's a standalone class to have better control on what is done.
+    TODO : Study if it could inherit from EventSource., 
+    """
+
+    def __init__(self,block_size=4,allowed_blocks=None,**kwargs):
+        self._arguments         = kwargs # blocks
+        self._file_names        = None
+        self._block_file_names  = list()
+        self._current_source    = None
+        self._current_block     = None
+        self._current_generator = None
+        self._total_entries     = 0
+        self._current_counts    = 0
+        self.block_size         = block_size
+        self.allowed_blocks     = None
+        self.max_events         = None
+        self.empty_entries      = 0
+        self.show_empty_stats   = False 
+
+
+        if isinstance(allowed_blocks,int):            
+            self.allowed_blocks = [allowed_blocks,]
+        elif isinstance(allowed_blocks,Iterable): 
+            self.allowed_blocks = list(set([ int(e) for e in allowed_blocks  ]))
+        else:
+            self.allowed_blocks = None
+
+        if "input_url" in self._arguments.keys():
+            self._file_names = glob.glob(kwargs['input_url'])
+            self._file_names.sort()
+            del self._arguments['input_url'] # We'll give the list to the NectarCAMEventSource so remove it from the arguments
+        elif "input_filelist" in self._arguments.keys():
+            self._file_names = kwargs['input_filelist']
+            self._file_names.sort()
+            del self._arguments['input_filelist'] # We'll give the list to the NectarCAMEventSource so remove it from the arguments
+        else:
+            raise ValueError("No input_irl or input_filelist given !")
+
+        if "max_events" in self._arguments.keys():
+            self.max_events = int(kwargs['max_events'])
+            del self._arguments['max_events'] # we are treating this option here, so don't forward it to NectarCAMEventSource
+
+        if "show_empty_stats" in self._arguments.keys():
+            self.show_empty_stats = bool(kwargs['show_empty_stats'])
+            del self._arguments['show_empty_stats'] # we are treating this option here, so don't forward it to NectarCAMEventSource
+    
+
+        self._create_blocks()
+        self._switch_block()
+
+    def __getattr__(self,attr):
+        # Forward unknown methods to the current NectarCAMEventSource, if it exist
+        # More careful checks are needed to know if this truly works...
+        if hasattr(self._current_source,attr):
+            attr_val = getattr(self._current_source,attr)
+            attr_type = type(attr_val)
+            if attr_type == types.MethodType or attr_type == types.FunctionType:
+                def call_wrapper(*args, **kwargs):
+                    return getattr(self._current_source, attr)(*args, **kwargs)
+                return call_wrapper
+            else:
+                return attr_val
+            
+    def _rewind(self):
+        self._current_block = None
+        self._switch_block()
+
+    def get_entries(self):
+        if self._total_entries == 0:
+            for filename in self._file_names:
+                self._total_entries += len(File(str(filename)).Events)
+        return self._total_entries if self.max_events is None else min(self._total_entries,self.max_events)
+
+    def _switch_block(self):
+        if self._current_block is None:
+            self._current_block = 0
+        else: 
+            self._current_block += 1
+        
+        valid = False
+        if self._current_block < len(self._block_file_names):
+            self._current_source = NectarCAMEventSource(input_filelist=self._block_file_names[self._current_block], **self._arguments)
+            self._current_generator = self._current_source._generator()
+            valid = True
+        return valid
+
+    def __len__(self):
+        return self.get_entries()
+    
+    def _create_blocks(self):
+
+        if len(self._file_names) % self.block_size !=0 or not self.consecutive_files(self._file_names):
+            print("Not possible to block --> Read everything")
+            block_list = list( self._file_names )
+        else:
+            block_list = list()
+            nBlocks = len(self._file_names)//self.block_size
+            for i in range(nBlocks):
+                imin = i*self.block_size
+                imax = (i+1)*self.block_size
+                block_list.append( self._file_names[imin:imax] )
+            if self.allowed_blocks is not None:
+                # going to only take the selected blocks
+                filtered_blocks = list()
+                for block in self.allowed_blocks:
+                    if block<len(block_list):
+                        filtered_blocks.append( block_list[block] )
+                ## Sanity check --> Remove duplicated entries
+                filtered_blocks = [x for n, x in enumerate(filtered_blocks) if x not in filtered_blocks[:n]]
+                filtered_blocks.sort() # just in case
+                block_list = filtered_blocks
+                # Erase the input list to keep only the selected files
+                self._file_names = [file for block in filtered_blocks for file in block]
+        
+        self._block_file_names = block_list
+
+    def consecutive_files(self,file_list=None):
+        if file_list is None:
+            file_list = self._file_names
+        # assume files are of type: 'NectarCAM.Run5665.0246.fits.fz'
+        consecutive = False
+        try:
+            numbers = np.array([ int(os.path.basename( f ).split('.fits.fz')[0].split('.')[-1]) for f in file_list])
+            delta_numbers = numbers[1:] - numbers[:-1]
+            consecutive = np.all( delta_numbers == 1) and numbers[0] == 0
+        except ValueError:
+            consecutive = False
+        return consecutive
+    
+    def __iter__(self):
+        self._rewind()
+        return self
+
+    def __next__(self):
+        if self.max_events is not None and self._current_counts >= self.max_events:
+            raise StopIteration
+        try:
+            next_entry = next(self._current_generator)
+        except StopIteration:
+            # End of current block, try if there is a next one
+            self.empty_entries += self._current_source.get_empty_entries()
+            if self._switch_block():
+                next_entry = next( self._current_generator )
+            else:
+                if self.show_empty_stats:
+                    self.print_empty_stats()
+                raise StopIteration
+        self._current_counts += 1
+        return next_entry
+
+
+    def get_empty_entries(self):
+        return self.empty_entries
+    
+    def print_empty_stats(self):
+        if self.empty_entries>0:
+            print(f"WARNING> Empty events : {self.empty_entries}/{self.get_entries()} --> {100.*self.empty_entries/self.get_entries():.2f} %")
 
 class MultiFiles:
     """
