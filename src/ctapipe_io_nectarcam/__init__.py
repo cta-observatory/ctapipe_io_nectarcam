@@ -1401,7 +1401,8 @@ class BlockNectarCAMEventSource:
 
         if len(self._file_names) % self.block_size !=0 or not self.consecutive_files(self._file_names):
             print("Not possible to block --> Read everything")
-            block_list = list( self._file_names )
+            block_list = list()
+            block_list.append( list( self._file_names ) )
         else:
             block_list = list()
             nBlocks = len(self._file_names)//self.block_size
