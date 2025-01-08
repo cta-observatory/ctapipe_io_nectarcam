@@ -1179,7 +1179,7 @@ class NectarCAMEventSource(EventSource):
             waveform = np.full(
                 (n_pixels, n_samples), fill, dtype=dtype
             )  # VIM : Replace full by empty ?
-            waveform[not_broken] = zfits_event.waveform.reshape((-1, n_samples))
+            waveform[not_broken] = zfits_event.waveform.reshape((-1, n_samples))[not_broken]
 
             reordered_waveform = np.full(
                 (N_PIXELS, N_SAMPLES), fill, dtype=dtype
