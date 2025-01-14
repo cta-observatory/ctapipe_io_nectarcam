@@ -770,7 +770,9 @@ class NectarCAMEventSource(EventSource):
             and (h["ZTABLE"] is True)
             and (h["ORIGIN"] == "CTA")
             and (
-                h["PBFHEAD"] == "R1.CameraEvent" or h["PBFHEAD"] == "CTAR1.Event"
+                h["PBFHEAD"] == "R1.CameraEvent"
+                or h["PBFHEAD"] == "CTAR1.Event"
+                or h["PBFHEAD"] == "R1v1.Event"
             )  # The latter is from EVBv6
         )
 
