@@ -773,7 +773,7 @@ class NectarCAMEventSource(EventSource):
                 h["PBFHEAD"] == "R1.CameraEvent"
                 or h["PBFHEAD"] == "CTAR1.Event"
                 or h["PBFHEAD"] == "R1v1.Event"
-            )  # The latter is from EVBv6
+            )  # The latter two are for EVBv6
         )
 
         is_nectarcam_file = "nectarcam_counters" in ttypes
