@@ -9,7 +9,6 @@ import glob
 import os
 import re
 import struct
-import types
 from collections.abc import Iterable
 from enum import IntFlag, auto
 
@@ -1336,31 +1335,27 @@ class BlockNectarCAMEventSource:
             self.allowed_blocks = None
 
         if "input_url" in self._arguments.keys():
+            # give list to NectarCAMEventSource so remove it from arguments
             self._file_names = glob.glob(kwargs["input_url"])
             self._file_names.sort()
-            del self._arguments[
-                "input_url"
-            ]  # We'll give the list to the NectarCAMEventSource so remove it from the arguments
+            del self._arguments["input_url"]
         elif "input_filelist" in self._arguments.keys():
+            # give list to NectarCAMEventSource so remove it from arguments
             self._file_names = kwargs["input_filelist"]
             self._file_names.sort()
-            del self._arguments[
-                "input_filelist"
-            ]  # We'll give the list to the NectarCAMEventSource so remove it from the arguments
+            del self._arguments["input_filelist"]
         else:
             raise ValueError("No input_irl or input_filelist given !")
 
         if "max_events" in self._arguments.keys():
+            # treating option here, don't forward it to NectarCAMEventSource
             self.max_events = int(kwargs["max_events"])
-            del self._arguments[
-                "max_events"
-            ]  # we are treating this option here, so don't forward it to NectarCAMEventSource
+            del self._arguments["max_events"]
 
         if "show_empty_stats" in self._arguments.keys():
+            # treating option here, don't forward it to NectarCAMEventSource
             self.show_empty_stats = bool(kwargs["show_empty_stats"])
-            del self._arguments[
-                "show_empty_stats"
-            ]  # we are treating this option here, so don't forward it to NectarCAMEventSource
+            del self._arguments["show_empty_stats"]
 
         self._create_blocks()
         self._switch_block()
@@ -1370,8 +1365,7 @@ class BlockNectarCAMEventSource:
         # More careful checks are needed to know if this truly works...
         if hasattr(self._current_source, attr):
             attr_val = getattr(self._current_source, attr)
-            attr_type = type(attr_val)
-            if attr_type == types.MethodType or attr_type == types.FunctionType:
+            if callable(attr_val):
 
                 def call_wrapper(*args, **kwargs):
                     return getattr(self._current_source, attr)(*args, **kwargs)
@@ -1433,7 +1427,7 @@ class BlockNectarCAMEventSource:
                 for block in self.allowed_blocks:
                     if block < len(block_list):
                         filtered_blocks.append(block_list[block])
-                ## Sanity check --> Remove duplicated entries
+                # Sanity check --> Remove duplicated entries
                 filtered_blocks = [
                     x
                     for n, x in enumerate(filtered_blocks)
@@ -1491,7 +1485,10 @@ class BlockNectarCAMEventSource:
     def print_empty_stats(self):
         if self.empty_entries > 0:
             print(
-                f"WARNING> Empty events : {self.empty_entries}/{self.get_entries()} --> {100.*self.empty_entries/self.get_entries():.2f} %"
+                f"WARNING> Empty events :"
+                f" {self.empty_entries}/{self.get_entries()}"
+                f" --> "
+                f"{100.*self.empty_entries/self.get_entries():.2f} %"
             )
 
 
