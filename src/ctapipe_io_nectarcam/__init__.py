@@ -54,7 +54,12 @@ from .containers import (
 )
 from .version import __version__
 
-__all__ = ["LightNectarCAMEventSource", "NectarCAMEventSource", "__version__"]
+__all__ = [
+    "LightNectarCAMEventSource",
+    "NectarCAMEventSource",
+    "BlockNectarCAMEventSource",
+    "__version__",
+]
 
 S_TO_NS = np.uint64(1e9)
 
@@ -1299,7 +1304,7 @@ class BlockNectarCAMEventSource:
     The grouping has the advantage of not opening all files at the same time.
 
     At the moment, it's a standalone class to have better control on what is done.
-    TODO : Study if it could inherit from EventSource.,
+    Could be made the default behavior of NectarCAMEventSource but need some rewriting.
 
     Input:
         block_size: The number of file per group.
@@ -1336,7 +1341,7 @@ class BlockNectarCAMEventSource:
 
         if "input_url" in self._arguments.keys():
             # give list to NectarCAMEventSource so remove it from arguments
-            self._file_names = glob.glob(kwargs["input_url"])
+            self._file_names = glob.glob(str(kwargs["input_url"]))
             self._file_names.sort()
             del self._arguments["input_url"]
         elif "input_filelist" in self._arguments.keys():
@@ -1359,6 +1364,15 @@ class BlockNectarCAMEventSource:
 
         self._create_blocks()
         self._switch_block()
+
+    @staticmethod
+    def is_compatible(file_path):
+        """
+        This version should only be called directly, so return False
+        such that it is not used when using EventSource.
+        Nevertheless, in principle it should work as NectarCAMEventSource by default.
+        """
+        return False
 
     def __getattr__(self, attr):
         # Forward unknown methods to the current NectarCAMEventSource, if it exist
