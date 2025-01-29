@@ -1409,8 +1409,8 @@ class BlockNectarCAMEventSource:
                         break
                 ids = np.array(ids,dtype=int)
                 self.block_size = int(np.median( np.array(ids[1:]-ids[:-1]) ))
-                #print(f'{self.block_size = }')
-        except Exception as err:
+                print(f'{self.block_size = }')
+        except Exception:
             print("Can't guess properly block size !")
             self.block_size = 4
 
