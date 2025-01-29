@@ -1319,7 +1319,7 @@ class BlockNectarCAMEventSource:
 
     """
 
-    def __init__(self, block_size=4, allowed_blocks=None, **kwargs):
+    def __init__(self, block_size=None, allowed_blocks=None, **kwargs):
         self._arguments = kwargs  # blocks
         self._file_names = None
         self._block_file_names = list()
@@ -1366,6 +1366,8 @@ class BlockNectarCAMEventSource:
             self.show_empty_stats = bool(kwargs["show_empty_stats"])
             del self._arguments["show_empty_stats"]
 
+        if self.block_size is None:
+            self._guess_block_size_from_file()
         self._create_blocks()
         self._switch_block()
 
@@ -1391,6 +1393,26 @@ class BlockNectarCAMEventSource:
                 return call_wrapper
             else:
                 return attr_val
+
+    def _guess_block_size_from_file(self):
+        if not self._file_names:
+            raise ValueError("No valid file list !")
+        # try to open the first file 
+        # read the first events
+        # look at the separation between ids
+        try: 
+            with File(str(self._file_names[0])) as f:
+                ids = list()
+                for e in f.Events:
+                    ids.append(e.event_id)
+                    if len(ids)>100:
+                        break
+                ids = np.array(ids,dtype=int)
+                self.block_size = int(np.median( np.array(ids[1:]-ids[:-1]) ))
+                #print(f'{self.block_size = }')
+        except Exception as err:
+            print("Can't guess properly block size !")
+            self.block_size = 4
 
     def _rewind(self):
         self._current_block = None
