@@ -256,9 +256,7 @@ def test_r1_waveforms():
 
 
 def test_blockdetection():
-    from ctapipe_io_nectarcam import (
-        BlockNectarCAMEventSource,
-    )
+    from ctapipe_io_nectarcam import BlockNectarCAMEventSource
 
     inputfile_reader = BlockNectarCAMEventSource(
             input_url=EXAMPLE_FILE_PATH_V6,
