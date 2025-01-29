@@ -1397,19 +1397,19 @@ class BlockNectarCAMEventSource:
     def _guess_block_size_from_file(self):
         if not self._file_names:
             raise ValueError("No valid file list !")
-        # try to open the first file 
+        # try to open the first file
         # read the first events
         # look at the separation between ids
-        try: 
+        try:
             with File(str(self._file_names[0])) as f:
                 ids = list()
                 for e in f.Events:
                     ids.append(e.event_id)
-                    if len(ids)>100:
+                    if len(ids) > 100:
                         break
-                ids = np.array(ids,dtype=int)
-                self.block_size = int(np.median( np.array(ids[1:]-ids[:-1]) ))
-                print(f'{self.block_size = }')
+                ids = np.array(ids, dtype=int)
+                self.block_size = int(np.median(np.array(ids[1:] - ids[:-1])))
+                print(f"{self.block_size = }")
         except Exception:
             print("Can't guess properly block size !")
             self.block_size = 4

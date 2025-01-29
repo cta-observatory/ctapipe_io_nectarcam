@@ -259,14 +259,11 @@ def test_blockdetection():
     from ctapipe_io_nectarcam import BlockNectarCAMEventSource
 
     inputfile_reader = BlockNectarCAMEventSource(
-            input_url=EXAMPLE_FILE_PATH_V6,
-        )
+        input_url=EXAMPLE_FILE_PATH_V6,
+    )
     assert inputfile_reader.block_size == 4
-    
-    inputfile_reader = BlockNectarCAMEventSource(
-            input_url=EXAMPLE_FILE_PATH,
-        )
-    assert inputfile_reader.block_size == 2
-    
-    
 
+    inputfile_reader = BlockNectarCAMEventSource(
+        input_url=EXAMPLE_FILE_PATH,
+    )
+    assert inputfile_reader.block_size == 2
