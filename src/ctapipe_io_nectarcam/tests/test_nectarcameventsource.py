@@ -253,3 +253,12 @@ def test_r1_waveforms():
             for event in inputfile_reader:
                 for telid in event.trigger.tels_with_trigger:
                     assert event.r1.tel[telid].waveform.shape == waveform_shape
+
+
+def test_blockdetection():
+    from ctapipe_io_nectarcam import BlockNectarCAMEventSource
+
+    assert (
+        BlockNectarCAMEventSource.guess_block_size_from_file(EXAMPLE_FILE_PATH_V6) == 4
+    )
+    assert BlockNectarCAMEventSource.guess_block_size_from_file(EXAMPLE_FILE_PATH) == 2
