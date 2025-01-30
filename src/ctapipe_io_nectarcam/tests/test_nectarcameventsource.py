@@ -258,12 +258,7 @@ def test_r1_waveforms():
 def test_blockdetection():
     from ctapipe_io_nectarcam import BlockNectarCAMEventSource
 
-    inputfile_reader = BlockNectarCAMEventSource(
-        input_url=EXAMPLE_FILE_PATH_V6,
+    assert (
+        BlockNectarCAMEventSource.guess_block_size_from_file(EXAMPLE_FILE_PATH_V6) == 4
     )
-    assert inputfile_reader.block_size == 4
-
-    inputfile_reader = BlockNectarCAMEventSource(
-        input_url=EXAMPLE_FILE_PATH,
-    )
-    assert inputfile_reader.block_size == 2
+    assert BlockNectarCAMEventSource.guess_block_size_from_file(EXAMPLE_FILE_PATH) == 2
