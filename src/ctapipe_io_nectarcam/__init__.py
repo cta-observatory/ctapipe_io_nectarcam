@@ -1269,9 +1269,13 @@ class NectarCAMEventSource(EventSource):
         status_container = array_event.mon.tel[self.tel_id].pixel_status
 
         # reorder the array
-        pixel_status = np.zeros(N_PIXELS)
+        pixel_status = np.zeros(
+            N_PIXELS, dtype=event.pixel_status.dtype
+        )  # pixel status is 8 bit
         pixel_status[self.nectarcam_service.pixel_ids] = event.pixel_status
-        status_container.hardware_failing_pixels[:] = pixel_status == 0
+        # According to A.1.5 of the R1 format, pixel is off/broken/missing
+        # if bit 2 and 3 are at 0.
+        status_container.hardware_failing_pixels[:] = (pixel_status & 0xC) == 0
 
 
 class LightNectarCAMEventSource(NectarCAMEventSource):
