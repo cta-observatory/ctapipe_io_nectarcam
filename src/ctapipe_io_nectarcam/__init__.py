@@ -1189,14 +1189,14 @@ class NectarCAMEventSource(EventSource):
             # print("GAIN SELECTED")
             selected_gain = np.where(has_high_gain, 0, 1)
             waveform = np.full(
-                (N_GAINS, n_pixels, n_samples), fill, dtype=dtype
+                (n_pixels, n_samples), fill, dtype=dtype
             )  # VIM : Replace full by empty ?
             waveform[not_broken] = zfits_event.waveform.reshape((-1, n_samples))[
                 not_broken
             ]
 
             reordered_waveform = np.full(
-                (N_GAINS, N_PIXELS, N_SAMPLES), fill, dtype=dtype
+                (N_PIXELS, N_SAMPLES), fill, dtype=dtype
             )  # VIM : Replace full by empty ?
             reordered_waveform[expected_pixels] = waveform
 
