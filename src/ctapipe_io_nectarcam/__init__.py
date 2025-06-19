@@ -45,7 +45,7 @@ from traitlets.config import Config
 
 from .anyarray_dtypes import CDTS_AFTER_37201_DTYPE, CDTS_BEFORE_37201_DTYPE, TIB_DTYPE
 from .calibration import NectarCAMR0Corrections
-from .constants import N_GAINS, N_PIXELS, N_SAMPLES
+from .constants import N_GAINS, N_PIXELS, N_SAMPLES, nectarcam_location
 from .containers import (
     NectarCAMDataContainer,
     NectarCAMDataStreamContainer,
@@ -636,7 +636,9 @@ class NectarCAMEventSource(EventSource):
         return self._pre_v6_data
 
     @staticmethod
-    def create_subarray(geometry_version, tel_id=0):
+    def create_subarray(
+        geometry_version, tel_id=0, reference_location=nectarcam_location
+    ):
         """
         Obtain the subarray from the EventSource
         Returns
@@ -675,6 +677,7 @@ class NectarCAMEventSource(EventSource):
             name=f"MST-{tel_id} subarray",
             tel_descriptions=tel_descriptions,
             tel_positions=tel_positions,
+            reference_location=nectarcam_location,
         )
 
         return subarray
@@ -962,7 +965,7 @@ class NectarCAMEventSource(EventSource):
 
         if not self.pre_v6_data:
             event_container.first_cell_id = np.full(
-                (N_PIXELS,), -1, dtype=event.first_cell_id.dtype
+                (N_PIXELS,), np.nan, dtype=event.first_cell_id.dtype
             )
             event_container.first_cell_id[
                 self.nectarcam_service.pixel_ids
@@ -1137,8 +1140,7 @@ class NectarCAMEventSource(EventSource):
         Fill the r0 or r1 container, depending on whether gain
         selection has already happened (r1) or not (r0)
         This will create waveforms of shape (N_GAINS, N_PIXELS, N_SAMPLES),
-        or (N_PIXELS, N_SAMPLES) respectively regardless of the n_pixels, n_samples
-        in the file.
+        regardless of the n_pixels, n_samples in the file.
         Missing or broken pixels are filled using maxval of the waveform dtype.
         """
 
