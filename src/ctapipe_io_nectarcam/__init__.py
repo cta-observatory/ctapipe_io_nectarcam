@@ -965,7 +965,7 @@ class NectarCAMEventSource(EventSource):
 
         if not self.pre_v6_data:
             event_container.first_cell_id = np.full(
-                (N_PIXELS,), np.inf, dtype=event.first_cell_id.dtype
+                (N_PIXELS,), np.nan, dtype=event.first_cell_id.dtype
             )
             event_container.first_cell_id[
                 self.nectarcam_service.pixel_ids
