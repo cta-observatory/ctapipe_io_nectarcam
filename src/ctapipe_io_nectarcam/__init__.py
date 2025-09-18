@@ -677,7 +677,7 @@ class NectarCAMEventSource(EventSource):
             name=f"MST-{tel_id} subarray",
             tel_descriptions=tel_descriptions,
             tel_positions=tel_positions,
-            reference_location=nectarcam_location,
+            reference_location=reference_location,
         )
 
         return subarray
