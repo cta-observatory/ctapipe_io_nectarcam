@@ -977,7 +977,8 @@ class NectarCAMEventSource(EventSource):
         if self.load_feb_info:
             self.unpack_feb_data(event_container, event, nectarcam_data)
 
-        # Fill information of the trigger mask
+        # Fill information of the trigger mask in the pixel_status if needed
+        # Note that FEB data must have been loaded
         if self.pre_v6_data:
             # before v6, then the information is in the trigger_pattern field
             # Add it to the pixel status where it is expected to be.
