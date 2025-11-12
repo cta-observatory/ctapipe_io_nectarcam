@@ -1129,8 +1129,8 @@ class NectarCAMEventSource(EventSource):
             3::n_fields
         ]
         # Unpack TS2 counters
-        ts2_decimal = lambda bits: (
-            bits - (1 << 8) if bits & 0x80 != 0 else bits
+        ts2_decimal = (
+            lambda bits: bits - (1 << 8) if bits & 0x80 != 0 else bits
         )  # noqa: E731
         ts2_decimal_vec = np.vectorize(ts2_decimal)
         event_container.feb_ts2_trig[
