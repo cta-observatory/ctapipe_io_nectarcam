@@ -496,6 +496,32 @@ class NectarCAMEventSource(EventSource):
             cor_tel_id = tel_id
         return cor_tel_id
 
+    def _estimate_if_trig_pat_missing(self, pre_v6_data, evb_version):
+        # Runs before EVB v6.12 does not have the trigger part
+        # of the pixel status bit pattern filled.
+        # The information is in the debug field trigger_pattern
+        # which comes from the feb.
+        # This function tries to estimate if there is the need to fill
+        # the relevant bit of the pixel_status
+
+        # Assume that tpat is in the pixel_status per default
+        tpat_missing = False
+
+        if pre_v6_data:
+            tpat_missing = True
+        else:
+            # idaq_version examples : 'v6.9.2-rc2' or 'v6.12.1'
+            # starting from v6.12, we have the trigger pattern info in pixel_status
+            if evb_version.startswith("v6"):
+                split_version = re.split(r"\.|-", evb_version)
+                try:
+                    minor_version = int(split_version[1])
+                    if minor_version < 12:
+                        tpat_missing = True
+                except (IndexError, ValueError):
+                    pass
+        return tpat_missing
+
     def __init__(self, **kwargs):
         """
         Constructor of the NectarCAMEventSource class.
@@ -567,6 +593,10 @@ class NectarCAMEventSource(EventSource):
         )
         self.nectarcam_datastream = self.fill_nectarcam_datastream_container_from_zfile(
             self.tel_id, self.multi_file.camera_datastream, self._pre_v6_data
+        )
+
+        self._missing_trig_pat = self._estimate_if_trig_pat_missing(
+            self._pre_v6_data, self.nectarcam_service.idaq_version
         )
 
         target_info = {}
@@ -979,11 +1009,7 @@ class NectarCAMEventSource(EventSource):
 
         # Fill information of the trigger mask in the pixel_status if needed
         # Note that FEB data must have been loaded
-        if self.pre_v6_data:
-            # before v6, then the information is in the trigger_pattern field
-            # Add it to the pixel status where it is expected to be.
-            # According to R1, section A5, the bit 5,6 and 7 are reserved
-            # Pattern 0x1F = bit 0,1,2,3,4
+        if self._missing_trig_pat:
             tpat = np.any(event_container.trigger_pattern, axis=0)
 
             event_container.pixel_status = (
@@ -992,22 +1018,6 @@ class NectarCAMEventSource(EventSource):
             event_container.pixel_status[tpat] = (
                 event_container.pixel_status[tpat] | PixelStatus.PIXEL_TRIGGER_1
             )
-        else:
-            # if v6 and version>6.12 --> pixel status contain the trigger info
-            try:
-                if not self.nectarcam_service.idaq_version >= "v6.12":
-                    # Fallback to the old method
-                    tpat = np.any(event_container.trigger_pattern, axis=0)
-                    event_container.pixel_status = (
-                        event_container.pixel_status & 0x1F
-                    )  # Reset the trigger part
-                    event_container.pixel_status[tpat] = (
-                        event_container.pixel_status[tpat] | PixelStatus.PIXEL_TRIGGER_1
-                    )
-            except Exception as err:
-                print(err)
-                # What should I do in this case...?
-                # pass
 
     def fill_trigger_info(self, array_event):
         tel_id = self.tel_id
@@ -1130,8 +1140,8 @@ class NectarCAMEventSource(EventSource):
         ]
         # Unpack TS2 counters
         ts2_decimal = (
-            lambda bits: bits - (1 << 8) if bits & 0x80 != 0 else bits
-        )  # noqa: E731
+            lambda bits: (bits - (1 << 8) if bits & 0x80 != 0 else bits )  # noqa: E731
+            )
         ts2_decimal_vec = np.vectorize(ts2_decimal)
         event_container.feb_ts2_trig[
             self.nectarcam_service.module_ids
