@@ -1,22 +1,23 @@
+from importlib.resources import files
+
 import numpy as np
 import tables
 from ctapipe.calib.camera.gainselection import ThresholdGainSelector
-from ctapipe.containers import MonitoringContainer, MonitoringCameraContainer, FlatFieldContainer, WaveformCalibrationContainer
+from ctapipe.containers import (
+    FlatFieldContainer,
+    MonitoringCameraContainer,
+    MonitoringContainer,
+    WaveformCalibrationContainer,
+)
 from ctapipe.core import TelescopeComponent
-from ctapipe.core.traits import (
-    Path, FloatTelescopeParameter, Bool, Float
-)
+from ctapipe.core.traits import Bool, Float, FloatTelescopeParameter, Path
 from ctapipe.io import HDF5TableReader
-from pkg_resources import resource_filename
 
-from .constants import (
-    N_GAINS, N_PIXELS, HIGH_GAIN, LOW_GAIN,
-    PIXEL_INDEX,
-)
+from .constants import HIGH_GAIN, LOW_GAIN, N_GAINS, N_PIXELS, PIXEL_INDEX
 from .containers import NectarCAMDataContainer
 
 __all__ = [
-    'NectarCAMR0Corrections',
+    "NectarCAMR0Corrections",
 ]
 
 
@@ -29,37 +30,32 @@ class NectarCAMR0Corrections(TelescopeComponent):
     """
 
     calibration_path = Path(
-        default_value=resource_filename(
-            'ctapipe_io_nectarcam',
-            'resources/calibrationfile_run3255_pedrun3255_gainrun3155_ctapipe018.hdf5'
-        ),
-        exists=True, directory_ok=False, allow_none=True,
-        help='Path to calibration file',
+        default_value=files("ctapipe_io_nectarcam")
+        / "resources/calibrationfile_run3255_pedrun3255_gainrun3155_ctapipe018.hdf5",
+        exists=True,
+        directory_ok=False,
+        allow_none=True,
+        help="Path to calibration file",
     ).tag(config=True)
 
     calib_scale_high_gain = FloatTelescopeParameter(
-        default_value=1.0,
-        help='High gain waveform is multiplied by this number'
+        default_value=1.0, help="High gain waveform is multiplied by this number"
     ).tag(config=True)
 
     calib_scale_low_gain = FloatTelescopeParameter(
-        default_value=1.0,
-        help='Low gain waveform is multiplied by this number'
+        default_value=1.0, help="Low gain waveform is multiplied by this number"
     ).tag(config=True)
 
     select_gain = Bool(
-        default_value=False,
-        help='Set to False to keep both gains.'
+        default_value=False, help="Set to False to keep both gains."
     ).tag(config=True)
 
     gain_selection_threshold = Float(
-        default_value=3500.,
-        help='Threshold for the ThresholdGainSelector.'
+        default_value=3500.0, help="Threshold for the ThresholdGainSelector."
     ).tag(config=True)
 
     apply_flatfield = Bool(
-        default_value=True,
-        help='Apply flatfielding coefficients.'
+        default_value=True, help="Apply flatfielding coefficients."
     ).tag(config=True)
 
     def __init__(self, subarray, config=None, parent=None, **kwargs):
@@ -69,16 +65,13 @@ class NectarCAMR0Corrections(TelescopeComponent):
         Parameters
         ----------
         """
-        super().__init__(
-            subarray=subarray, config=config, parent=parent, **kwargs
-        )
+        super().__init__(subarray=subarray, config=config, parent=parent, **kwargs)
 
         self.mon_data = None
 
         if self.select_gain:
             self.gain_selector = ThresholdGainSelector(
-                threshold=self.gain_selection_threshold,
-                parent=self
+                threshold=self.gain_selection_threshold, parent=self
             )
         else:
             self.gain_selector = None
@@ -92,7 +85,7 @@ class NectarCAMR0Corrections(TelescopeComponent):
             # check if waveform is already filled
             if r1.waveform is None:
                 r1.waveform = event.r0.tel[tel_id].waveform.copy()
-                # Force a copy as v6 have waveform as float 
+                # Force a copy as v6 have waveform as float
                 # so in this case r0 == r1 (in memory)
 
             r1.waveform = r1.waveform.astype(np.float32, copy=False)
@@ -111,7 +104,7 @@ class NectarCAMR0Corrections(TelescopeComponent):
                 convert_to_pe(
                     waveform=r1.waveform,
                     calibration=calibration,
-                    selected_gain_channel=r1.selected_gain_channel
+                    selected_gain_channel=r1.selected_gain_channel,
                 )
                 # flatfielding
                 if self.apply_flatfield:
@@ -119,27 +112,31 @@ class NectarCAMR0Corrections(TelescopeComponent):
                     apply_flatfield(
                         waveform=r1.waveform,
                         flatfield=flatfield,
-                        selected_gain_channel=r1.selected_gain_channel
+                        selected_gain_channel=r1.selected_gain_channel,
                     )
 
             # do not use pixels that are broken in this run or have unusable calibration
             unusable_pixels = np.logical_and(
                 event.mon.tel[tel_id].pixel_status.hardware_failing_pixels,
-                self.mon_data.tel[tel_id].calibration.unusable_pixels
+                self.mon_data.tel[tel_id].calibration.unusable_pixels,
             )
             # set r1 waveforms to 0 for broken pixels
             if r1.selected_gain_channel is None:
                 r1.waveform[unusable_pixels] = 0.0
             else:
-                r1.waveform[unusable_pixels[r1.selected_gain_channel, PIXEL_INDEX]] = 0.0
+                r1.waveform[
+                    unusable_pixels[r1.selected_gain_channel, PIXEL_INDEX]
+                ] = 0.0
 
             # needed for charge scaling in ctpaipe dl1 calib
             if r1.selected_gain_channel is not None:
                 relative_factor = np.empty(N_PIXELS)
-                relative_factor[r1.selected_gain_channel == HIGH_GAIN] = \
-                    self.calib_scale_high_gain.tel[tel_id]
-                relative_factor[r1.selected_gain_channel == LOW_GAIN] = \
-                    self.calib_scale_low_gain.tel[tel_id]
+                relative_factor[
+                    r1.selected_gain_channel == HIGH_GAIN
+                ] = self.calib_scale_high_gain.tel[tel_id]
+                relative_factor[
+                    r1.selected_gain_channel == LOW_GAIN
+                ] = self.calib_scale_low_gain.tel[tel_id]
             else:
                 relative_factor = np.empty((N_GAINS, N_PIXELS))
                 relative_factor[HIGH_GAIN] = self.calib_scale_high_gain.tel[tel_id]
@@ -158,21 +155,27 @@ class NectarCAMR0Corrections(TelescopeComponent):
 
         with tables.open_file(path) as f:
             tel_ids = [
-                int(key[4:]) for key in f.root._v_children.keys()
-                if key.startswith('tel_')
+                int(key[4:])
+                for key in f.root._v_children.keys()
+                if key.startswith("tel_")
             ]
         for tel_id in tel_ids:
             with HDF5TableReader(path) as h5_table:
                 mon.tel[tel_id] = MonitoringCameraContainer(
-                    calibration=next(h5_table.read(f'/tel_{tel_id}/calibration', WaveformCalibrationContainer)),
-                    flatfield=next(h5_table.read(f'/tel_{tel_id}/flatfield', FlatFieldContainer)),
+                    calibration=next(
+                        h5_table.read(
+                            f"/tel_{tel_id}/calibration", WaveformCalibrationContainer
+                        )
+                    ),
+                    flatfield=next(
+                        h5_table.read(f"/tel_{tel_id}/flatfield", FlatFieldContainer)
+                    ),
                 )
 
         return mon
 
 
 def convert_to_pe(waveform, calibration, selected_gain_channel):
-
     if selected_gain_channel is None:
         waveform -= calibration.pedestal_per_sample
         waveform *= calibration.dc_to_pe[:, :, np.newaxis]
@@ -186,4 +189,5 @@ def apply_flatfield(waveform, flatfield, selected_gain_channel):
         waveform *= flatfield.relative_gain_mean[:, :, np.newaxis]
     else:
         waveform *= flatfield.relative_gain_mean[
-            selected_gain_channel, PIXEL_INDEX, np.newaxis]
+            selected_gain_channel, PIXEL_INDEX, np.newaxis
+        ]

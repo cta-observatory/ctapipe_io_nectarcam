@@ -11,6 +11,7 @@ import re
 import struct
 from collections.abc import Iterable
 from enum import IntFlag, auto
+from importlib.resources import as_file, files
 
 import numpy as np
 from astropy import units as u
@@ -39,7 +40,6 @@ from ctapipe.instrument import (
     TelescopeDescription,
 )
 from ctapipe.io import DataLevel, EventSource
-from pkg_resources import resource_filename
 from protozfits import File
 from traitlets.config import Config
 
@@ -384,12 +384,11 @@ def load_camera_geometry(version=3):
 
     # from ctapipe_io_nectarcam import nectar_trigger_patches,find_central_pixels
 
-    f = resource_filename(
-        "ctapipe_io_nectarcam", f"resources/NectarCam-{version:03d}.camgeom.fits.gz"
-    )
-    Provenance().add_input_file(f, role="CameraGeometry")
-    geom = CameraGeometry.from_table(f)
-    geom.frame = CameraFrame(focal_length=OPTICS.equivalent_focal_length)
+    camera_geometry_path = f"resources/NectarCam-{version:03d}.camgeom.fits.gz"
+    with as_file(files("ctapipe_io_nectarcam") / camera_geometry_path) as path:
+        Provenance().add_input_file(path, role="CameraGeometry")
+        geom = CameraGeometry.from_table(path)
+        geom.frame = CameraFrame(focal_length=OPTICS.equivalent_focal_length)
 
     # Add the trigger patches as an attribute on-the-fly for now.
     add_nectar_trigger_patches_to_geom(geom)
@@ -413,8 +412,9 @@ def read_pulse_shapes():
     # https://gitlab.cta-observatory.org/cta-consortium/aswg/simulations/
     # simulation-model/simulation-model-description/-/blob/master/datFiles/
     # Pulse_template_nectarCam_17042020.dat
-    infilename = resource_filename(
-        "ctapipe_io_nectarcam", "resources/Pulse_template_nectarCam_17042020.dat"
+    infilename = (
+        files("ctapipe_io_nectarcam")
+        / "resources/Pulse_template_nectarCam_17042020.dat"
     )
 
     data = np.genfromtxt(infilename, dtype="float", comments="#")
