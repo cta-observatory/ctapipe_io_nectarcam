@@ -14,5 +14,6 @@ dependencies:
   - pytest-runner
   - pyyaml
   - scipy=1.11.4
+  - setuptools<81
   - zeromq
   - zlib
