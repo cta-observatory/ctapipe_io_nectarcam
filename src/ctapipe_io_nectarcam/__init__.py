@@ -412,7 +412,6 @@ def read_pulse_shapes():
     # https://gitlab.cta-observatory.org/cta-consortium/aswg/simulations/
     # simulation-model/simulation-model-description/-/blob/master/datFiles/
     # Pulse_template_nectarCam_17042020.dat
-
     infilename = (
         files("ctapipe_io_nectarcam")
         / "resources/Pulse_template_nectarCam_17042020.dat"
