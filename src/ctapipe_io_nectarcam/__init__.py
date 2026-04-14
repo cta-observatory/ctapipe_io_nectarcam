@@ -1018,15 +1018,15 @@ class NectarCAMEventSource(EventSource):
 
         # Fill information of the trigger mask in the pixel_status if needed
         # Note that FEB data must have been loaded
-        if self._missing_trig_pat:
-            tpat = np.any(event_container.trigger_pattern, axis=0)
-
-            event_container.pixel_status = (
-                event_container.pixel_status & 0x1F
-            )  # Reset the trigger part
-            event_container.pixel_status[tpat] = (
-                event_container.pixel_status[tpat] | PixelStatus.PIXEL_TRIGGER_1
-            )
+        # if self._missing_trig_pat:
+        #     tpat = np.any(event_container.trigger_pattern, axis=0)
+        #
+        #     event_container.pixel_status = (
+        #         event_container.pixel_status & 0x1F
+        #     )  # Reset the trigger part
+        #     event_container.pixel_status[tpat] = (
+        #         event_container.pixel_status[tpat] | PixelStatus.PIXEL_TRIGGER_1
+        #     )
 
     def fill_trigger_info(self, array_event):
         tel_id = self.tel_id
@@ -1250,6 +1250,7 @@ class NectarCAMEventSource(EventSource):
                 (N_PIXELS, N_SAMPLES), fill, dtype=dtype
             )  # VIM : Replace full by empty ?
             reordered_waveform[expected_pixels] = waveform
+            reordered_waveform = reordered_waveform[np.newaxis, ...]
 
             reordered_selected_gain = np.full(N_PIXELS, -1, dtype=np.int8)
             reordered_selected_gain[expected_pixels] = selected_gain

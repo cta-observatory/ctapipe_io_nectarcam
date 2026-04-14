@@ -48,7 +48,7 @@ class NectarCAMR0Corrections(TelescopeComponent):
     ).tag(config=True)
 
     select_gain = Bool(
-        default_value=False,
+        default_value=True,
         help='Set to False to keep both gains.'
     ).tag(config=True)
 
@@ -132,6 +132,11 @@ class NectarCAMR0Corrections(TelescopeComponent):
                 r1.waveform[unusable_pixels] = 0.0
             else:
                 r1.waveform[unusable_pixels[r1.selected_gain_channel, PIXEL_INDEX]] = 0.0
+            r1.waveform = r1.waveform[np.newaxis, ...]
+
+            # TODO: JPL: I guess this is not sufficient:
+            r1.pixel_status = np.uint8(event.mon.tel[
+                tel_id].pixel_status.hardware_failing_pixels[0])
 
             # needed for charge scaling in ctpaipe dl1 calib
             if r1.selected_gain_channel is not None:
