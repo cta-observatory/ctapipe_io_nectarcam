@@ -48,7 +48,7 @@ class NectarCAMR0Corrections(TelescopeComponent):
     ).tag(config=True)
 
     select_gain = Bool(
-        default_value=True,
+        default_value=False,
         help='Set to False to keep both gains.'
     ).tag(config=True)
 
