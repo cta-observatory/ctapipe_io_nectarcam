@@ -1251,6 +1251,8 @@ class NectarCAMEventSource(EventSource):
                 (N_PIXELS, N_SAMPLES), fill, dtype=dtype
             )  # VIM : Replace full by empty ?
             reordered_waveform[expected_pixels] = waveform
+            # R1- and DL0-waveform data shape should be (n_gains, n_pixels,
+            # n_samples) from ctapipe v0.21 onwards:
             reordered_waveform = reordered_waveform[np.newaxis, ...]
 
             reordered_selected_gain = np.full(N_PIXELS, -1, dtype=np.int8)
