@@ -1018,15 +1018,16 @@ class NectarCAMEventSource(EventSource):
 
         # Fill information of the trigger mask in the pixel_status if needed
         # Note that FEB data must have been loaded
-        # if self._missing_trig_pat:
-        #     tpat = np.any(event_container.trigger_pattern, axis=0)
-        #
-        #     event_container.pixel_status = (
-        #         event_container.pixel_status & 0x1F
-        #     )  # Reset the trigger part
-        #     event_container.pixel_status[tpat] = (
-        #         event_container.pixel_status[tpat] | PixelStatus.PIXEL_TRIGGER_1
-        #     )
+        if self._missing_trig_pat:
+            tpat = np.any(event_container.trigger_pattern, axis=0)
+            tpat = tpat[self.nectarcam_service.pixel_ids]
+
+            event_container.pixel_status = (
+                event_container.pixel_status & 0x1F
+            )  # Reset the trigger part
+            event_container.pixel_status[tpat] = (
+                event_container.pixel_status[tpat] | PixelStatus.PIXEL_TRIGGER_1
+            )
 
     def fill_trigger_info(self, array_event):
         tel_id = self.tel_id
