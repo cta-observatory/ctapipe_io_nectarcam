@@ -136,7 +136,7 @@ class NectarCAMR0Corrections(TelescopeComponent):
                 r1.pixel_status = np.uint8(unusable_pixels[r1.selected_gain_channel])
             r1.waveform = r1.waveform[np.newaxis, ...]
 
-            # needed for charge scaling in ctpaipe dl1 calib
+            # needed for charge scaling in ctapipe dl1 calib
             if r1.selected_gain_channel is not None:
                 relative_factor = np.empty(N_PIXELS)
                 relative_factor[r1.selected_gain_channel == HIGH_GAIN] = \
