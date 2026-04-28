@@ -653,6 +653,15 @@ class NectarCAMEventSource(EventSource):
 
     @property
     def datalevels(self):
+        '''
+        TODO: TO BE COMPLETED
+        Needs to be updated to take into account different cases
+        if select_gain: (R0,R1)
+        if input data file is already gain selected: (R1)
+        otherwise: (R0)
+        '''
+        if self.r0_r1_calibrator.select_gain:
+            return (DataLevel.R0, DataLevel.R1)
         if self.r0_r1_calibrator.calibration_path is not None:
             return (DataLevel.R0, DataLevel.R1)
         return (DataLevel.R0,)
