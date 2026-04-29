@@ -45,7 +45,7 @@ from traitlets.config import Config
 
 from .anyarray_dtypes import CDTS_AFTER_37201_DTYPE, CDTS_BEFORE_37201_DTYPE, TIB_DTYPE
 from .calibration import NectarCAMR0Corrections
-from .constants import N_GAINS, N_PIXELS, N_SAMPLES, nectarcam_location
+from .constants import N_GAINS, N_PIXELS, N_SAMPLES, N_MODULES, nectarcam_location
 from .containers import (
     NectarCAMDataContainer,
     NectarCAMDataStreamContainer,
@@ -653,13 +653,13 @@ class NectarCAMEventSource(EventSource):
 
     @property
     def datalevels(self):
-        '''
+        """
         TODO: TO BE COMPLETED
         Needs to be updated to take into account different cases
         if select_gain: (R0,R1)
         if input data file is already gain selected: (R1)
         otherwise: (R0)
-        '''
+        """
         if self.r0_r1_calibrator.select_gain:
             return (DataLevel.R0, DataLevel.R1)
         if self.r0_r1_calibrator.calibration_path is not None:
@@ -962,9 +962,21 @@ class NectarCAMEventSource(EventSource):
             # Above info not in Event for v6. Put None instead
 
         event_container.event_id = event.event_id
-        event_container.pixel_status = event.pixel_status
+        zfits_pixel_status = event.pixel_status
+        event_container.pixel_status = np.ones(N_PIXELS, dtype=zfits_pixel_status.dtype)
+        # R1 data should have the bit 0 at 1 according to the R1 data
+        event_container.pixel_status[self.nectarcam_service.pixel_ids] = (
+            zfits_pixel_status
+        )
 
-        event_container.module_status = nectarcam_data.module_status
+        zfits_module_status = nectarcam_data.module_status
+        event_container.module_status = np.zeros(
+            N_MODULES, dtype=zfits_module_status.dtype
+        )
+        # module_status: 1 = present, 0 = absent
+        event_container.module_status[self.nectarcam_service.module_ids] = (
+            zfits_module_status
+        )
         event_container.extdevices_presence = nectarcam_data.extdevices_presence
         event_container.swat_data = nectarcam_data.swat_data
         event_container.counters = nectarcam_data.counters
@@ -1008,19 +1020,19 @@ class NectarCAMEventSource(EventSource):
                 np.iinfo(event.first_cell_id.dtype).max,
                 dtype=event.first_cell_id.dtype,
             )
-            event_container.first_cell_id[
-                self.nectarcam_service.pixel_ids
-            ] = event.first_cell_id
+            event_container.first_cell_id[self.nectarcam_service.pixel_ids] = (
+                event.first_cell_id
+            )
 
         # Unpack FEB counters and trigger pattern
         if self.load_feb_info:
             self.unpack_feb_data(event_container, event, nectarcam_data)
 
         # Fill information of the trigger mask in the pixel_status if needed
-        # Note that FEB data must have been loaded
-        if self._missing_trig_pat:
+        # Note that FEB data must have been loaded.
+        # Should it be forced if _missing_trig_pat is at False ?
+        if self._missing_trig_pat and event_container.trigger_pattern is not None:
             tpat = np.any(event_container.trigger_pattern, axis=0)
-            tpat = tpat[self.nectarcam_service.pixel_ids]
 
             event_container.pixel_status = (
                 event_container.pixel_status & 0x1F
@@ -1133,9 +1145,9 @@ class NectarCAMEventSource(EventSource):
             )
 
         # Unpack absolute event ID
-        event_container.feb_abs_event_id[
-            self.nectarcam_service.module_ids
-        ] = unpacked_feb[0::n_fields]
+        event_container.feb_abs_event_id[self.nectarcam_service.module_ids] = (
+            unpacked_feb[0::n_fields]
+        )
         # Unpack PPS counter
         event_container.feb_pps_cnt[self.nectarcam_service.module_ids] = unpacked_feb[
             1::n_fields
@@ -1151,12 +1163,12 @@ class NectarCAMEventSource(EventSource):
         # Unpack TS2 counters
         ts2_decimal = lambda bits: (bits - (1 << 8) if bits & 0x80 != 0 else bits)
         ts2_decimal_vec = np.vectorize(ts2_decimal)
-        event_container.feb_ts2_trig[
-            self.nectarcam_service.module_ids
-        ] = ts2_decimal_vec(unpacked_feb[4::n_fields])
-        event_container.feb_ts2_pps[
-            self.nectarcam_service.module_ids
-        ] = ts2_decimal_vec(unpacked_feb[5::n_fields])
+        event_container.feb_ts2_trig[self.nectarcam_service.module_ids] = (
+            ts2_decimal_vec(unpacked_feb[4::n_fields])
+        )
+        event_container.feb_ts2_pps[self.nectarcam_service.module_ids] = (
+            ts2_decimal_vec(unpacked_feb[5::n_fields])
+        )
         # Loop over modules
         for module_idx, module_id in enumerate(self.nectarcam_service.module_ids):
             offset = module_id * 7
@@ -1168,9 +1180,9 @@ class NectarCAMEventSource(EventSource):
                     module_pattern = [
                         int(digit) for digit in reversed(bin(value)[2:].zfill(7))
                     ]
-                    event_container.trigger_pattern[
-                        pattern_id, offset : offset + 7
-                    ] = module_pattern
+                    event_container.trigger_pattern[pattern_id, offset : offset + 7] = (
+                        module_pattern
+                    )
 
         # Unpack native charge
         if len(nectarcam_data.charges_gain1) > 0:
