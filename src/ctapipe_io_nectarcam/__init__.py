@@ -45,7 +45,7 @@ from traitlets.config import Config
 
 from .anyarray_dtypes import CDTS_AFTER_37201_DTYPE, CDTS_BEFORE_37201_DTYPE, TIB_DTYPE
 from .calibration import NectarCAMR0Corrections
-from .constants import N_GAINS, N_PIXELS, N_SAMPLES, nectarcam_location
+from .constants import N_GAINS, N_MODULES, N_PIXELS, N_SAMPLES, nectarcam_location
 from .containers import (
     NectarCAMDataContainer,
     NectarCAMDataStreamContainer,
@@ -653,13 +653,13 @@ class NectarCAMEventSource(EventSource):
 
     @property
     def datalevels(self):
-        '''
+        """
         TODO: TO BE COMPLETED
         Needs to be updated to take into account different cases
         if select_gain: (R0,R1)
         if input data file is already gain selected: (R1)
         otherwise: (R0)
-        '''
+        """
         if self.r0_r1_calibrator.select_gain:
             return (DataLevel.R0, DataLevel.R1)
         if self.r0_r1_calibrator.calibration_path is not None:
@@ -962,9 +962,21 @@ class NectarCAMEventSource(EventSource):
             # Above info not in Event for v6. Put None instead
 
         event_container.event_id = event.event_id
-        event_container.pixel_status = event.pixel_status
+        zfits_pixel_status = event.pixel_status
+        event_container.pixel_status = np.ones(N_PIXELS, dtype=zfits_pixel_status.dtype)
+        # R1 data should have the bit 0 at 1 according to the R1 data
+        event_container.pixel_status[
+            self.nectarcam_service.pixel_ids
+        ] = zfits_pixel_status
 
-        event_container.module_status = nectarcam_data.module_status
+        zfits_module_status = nectarcam_data.module_status
+        event_container.module_status = np.zeros(
+            N_MODULES, dtype=zfits_module_status.dtype
+        )
+        # module_status: 1 = present, 0 = absent
+        event_container.module_status[
+            self.nectarcam_service.module_ids
+        ] = zfits_module_status
         event_container.extdevices_presence = nectarcam_data.extdevices_presence
         event_container.swat_data = nectarcam_data.swat_data
         event_container.counters = nectarcam_data.counters
@@ -1017,8 +1029,9 @@ class NectarCAMEventSource(EventSource):
             self.unpack_feb_data(event_container, event, nectarcam_data)
 
         # Fill information of the trigger mask in the pixel_status if needed
-        # Note that FEB data must have been loaded
-        if self._missing_trig_pat:
+        # Note that FEB data must have been loaded.
+        # Should it be forced if _missing_trig_pat is at False ?
+        if self._missing_trig_pat and event_container.trigger_pattern is not None:
             tpat = np.any(event_container.trigger_pattern, axis=0)
 
             event_container.pixel_status = (
@@ -1250,6 +1263,9 @@ class NectarCAMEventSource(EventSource):
                 (N_PIXELS, N_SAMPLES), fill, dtype=dtype
             )  # VIM : Replace full by empty ?
             reordered_waveform[expected_pixels] = waveform
+            # R1- and DL0-waveform data shape should be (n_gains, n_pixels,
+            # n_samples) from ctapipe v0.21 onwards:
+            reordered_waveform = reordered_waveform[np.newaxis, ...]
 
             reordered_selected_gain = np.full(N_PIXELS, -1, dtype=np.int8)
             reordered_selected_gain[expected_pixels] = selected_gain
