@@ -249,7 +249,7 @@ def test_r1_waveforms():
                 input_url=example_file_path, max_events=n_events, config=config
             )
 
-            waveform_shape = (N_PIXELS, N_SAMPLES)
+            waveform_shape = (1, N_PIXELS, N_SAMPLES)
             for event in inputfile_reader:
                 for telid in event.trigger.tels_with_trigger:
                     assert event.r1.tel[telid].waveform.shape == waveform_shape
