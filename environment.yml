@@ -3,7 +3,7 @@ channels:
   - conda-forge
   - default
 dependencies:
-  - python=3.14
+  - python=3.12
   - ctapipe=0.24
   - h5py
   - ipython
