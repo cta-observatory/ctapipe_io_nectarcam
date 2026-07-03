@@ -22,6 +22,7 @@ dependencies = [
     "ctapipe~=0.24.0",
     "protozfits",
     "scipy",
+    "setuptools<81",
 ]
 
 # needed for setuptools_scm, we don't define a static version
