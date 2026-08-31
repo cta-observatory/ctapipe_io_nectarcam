@@ -15,14 +15,16 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Astronomy",
     "Topic :: Scientific/Engineering :: Physics",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11"
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13"
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "ctapipe~=0.24.0",
+    "numpy<2.4",
     "protozfits",
     "scipy",
+    "setuptools<81",
 ]
 
 # needed for setuptools_scm, we don't define a static version
