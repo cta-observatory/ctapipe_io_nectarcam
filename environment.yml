@@ -8,6 +8,7 @@ dependencies:
   - h5py
   - ipython
   - numba
+  - numpy<2.4
   - numpydoc
   - pip
   - protozfits
