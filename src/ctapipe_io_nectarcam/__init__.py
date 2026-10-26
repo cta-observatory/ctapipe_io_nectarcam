@@ -653,13 +653,13 @@ class NectarCAMEventSource(EventSource):
 
     @property
     def datalevels(self):
-        '''
+        """
         TODO: TO BE COMPLETED
         Needs to be updated to take into account different cases
         if select_gain: (R0,R1)
         if input data file is already gain selected: (R1)
         otherwise: (R0)
-        '''
+        """
         if self.r0_r1_calibrator.select_gain:
             return (DataLevel.R0, DataLevel.R1)
         if self.r0_r1_calibrator.calibration_path is not None:
@@ -962,7 +962,12 @@ class NectarCAMEventSource(EventSource):
             # Above info not in Event for v6. Put None instead
 
         event_container.event_id = event.event_id
-        event_container.pixel_status = event.pixel_status
+        # place the pixel_status into the full camera array so that it matches the
+        # trigger_pattern / first_cell_id arrays (N_PIXELS), also for cameras where
+        # some modules/pixels are missing (fewer than N_PIXELS in the file)
+        pixel_status = np.zeros(N_PIXELS, dtype=event.pixel_status.dtype)
+        pixel_status[self.nectarcam_service.pixel_ids] = event.pixel_status
+        event_container.pixel_status = pixel_status
 
         event_container.module_status = nectarcam_data.module_status
         event_container.extdevices_presence = nectarcam_data.extdevices_presence
