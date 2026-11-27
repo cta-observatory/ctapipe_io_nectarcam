@@ -964,7 +964,8 @@ class NectarCAMEventSource(EventSource):
         event_container.event_id = event.event_id
         # place the pixel_status into the full camera array so that it matches the
         # trigger_pattern / first_cell_id arrays (N_PIXELS), also for cameras where
-        # some modules/pixels are missing (fewer than N_PIXELS in the file)
+        # some modules/pixels are missing (fewer than N_PIXELS in the file).
+        # Missing pixels (absent from the file) keep the default status (0).
         pixel_status = np.zeros(N_PIXELS, dtype=event.pixel_status.dtype)
         pixel_status[self.nectarcam_service.pixel_ids] = event.pixel_status
         event_container.pixel_status = pixel_status
