@@ -262,3 +262,48 @@ def test_blockdetection():
         BlockNectarCAMEventSource.guess_block_size_from_file(EXAMPLE_FILE_PATH_V6) == 4
     )
     assert BlockNectarCAMEventSource.guess_block_size_from_file(EXAMPLE_FILE_PATH) == 2
+
+
+def test_pixel_status_with_missing_pixels():
+    """
+    Regression test for PR #91.
+    The v6 example file (NectarCAM.Run5288.0001.fits.fz) contains only
+    264 active modules out of 265: pixel ids 35..41 (module id 5) are
+    missing from the file. The event pixel_status must be remapped into
+    the full N_PIXELS camera array using the pixel_ids, missing pixels
+    keeping the default status (0).
+    """
+    import numpy as np
+
+    from ctapipe_io_nectarcam import (
+        BlockNectarCAMEventSource,
+        LightNectarCAMEventSource,
+        NectarCAMEventSource,
+    )
+
+    for event_source in [
+        NectarCAMEventSource,
+        LightNectarCAMEventSource,
+        BlockNectarCAMEventSource,
+    ]:
+        inputfile_reader = event_source(input_url=EXAMPLE_FILE_PATH_V6, max_events=3)
+
+        pixel_ids = inputfile_reader.nectarcam_service.pixel_ids
+        assert len(pixel_ids) < N_PIXELS  # this dataset has missing pixels
+
+        present = np.zeros(N_PIXELS, dtype=bool)
+        present[pixel_ids] = True
+
+        for event in inputfile_reader:
+            for tel_id in event.trigger.tels_with_trigger:
+                pixel_status = event.nectarcam.tel[tel_id].evt.pixel_status
+
+                # full camera length, even with missing pixels in the file
+                assert pixel_status.shape == (N_PIXELS,)
+
+                # present pixels keep their on-file status
+                assert np.all(pixel_status[present] != 0)
+
+                # the missing pixels fall back to the default status (0)
+                assert np.all(pixel_status[~present] == 0)
+                assert np.count_nonzero(pixel_status == 0) == N_PIXELS - len(pixel_ids)
