@@ -225,12 +225,9 @@ def test_pixel_status_with_incomplete_camera():
 
             # the pixel_status must be reordered using the same pixel ids as
             # the (separately filled) monitoring pixel_status
-            hardware_failing = (
-                event.mon.tel[0].pixel_status.hardware_failing_pixels
-            )
-            assert np.array_equal(
-                (pixel_status & 0xC) == 0, hardware_failing[0]
-            )
+            hardware_failing = event.mon.tel[0].pixel_status.hardware_failing_pixels
+
+            assert np.array_equal((pixel_status & 0xC) == 0, hardware_failing[0])
 
 
 def test_time_precision():
