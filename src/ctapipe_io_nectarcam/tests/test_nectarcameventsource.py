@@ -1,3 +1,4 @@
+import numpy as np
 from ctapipe.utils import get_dataset_path
 from traitlets.config import Config
 
@@ -179,6 +180,57 @@ def test_subarray():
 
             n_camera_pixels = inputfile_reader.subarray.tel[0].camera.geometry.n_pixels
             assert n_camera_pixels == N_PIXELS
+
+
+def test_pixel_status_with_incomplete_camera():
+    """
+    Regression test for the bug fixed in
+    "Fix pixel_status length for cameras with missing pixels".
+
+    When a data file contains fewer modules than the maximum
+    (265 modules == N_PIXELS pixels), the raw pixel_status read from the file
+    is shorter than N_PIXELS. It must be placed into a full-length N_PIXELS
+    array using the pixel ids, so that it is consistent with the other
+    per-pixel arrays (trigger_pattern, first_cell_id, ...).
+    """
+    from ctapipe_io_nectarcam import (
+        BlockNectarCAMEventSource,
+        LightNectarCAMEventSource,
+        NectarCAMEventSource,
+    )
+
+    # NectarCAM.Run5288.0001.fits.fz contains only 264 modules
+    # (= 1848 pixels < N_PIXELS), i.e. fewer than a full camera, so it
+    # triggers the bug. Guard against the test file being replaced by a
+    # full-camera file in the future.
+    reader = NectarCAMEventSource(input_url=EXAMPLE_FILE_PATH_V6, max_events=1)
+    assert reader.nectarcam_service.num_pixels < N_PIXELS
+
+    for event_source in [
+        NectarCAMEventSource,
+        LightNectarCAMEventSource,
+        BlockNectarCAMEventSource,
+    ]:
+        inputfile_reader = event_source(input_url=EXAMPLE_FILE_PATH_V6, max_events=1)
+        pixel_ids = np.asarray(inputfile_reader.nectarcam_service.pixel_ids)
+        missing_pixels = np.setdiff1d(np.arange(N_PIXELS), pixel_ids)
+
+        for event in inputfile_reader:
+            pixel_status = event.nectarcam.tel[0].evt.pixel_status
+
+            # the pixel_status must have the full camera size
+            assert len(pixel_status) == N_PIXELS
+            # the pixels that are not present in the file stay at 0
+            assert np.all(pixel_status[missing_pixels] == 0)
+
+            # the pixel_status must be reordered using the same pixel ids as
+            # the (separately filled) monitoring pixel_status
+            hardware_failing = (
+                event.mon.tel[0].pixel_status.hardware_failing_pixels
+            )
+            assert np.array_equal(
+                (pixel_status & 0xC) == 0, hardware_failing[0]
+            )
 
 
 def test_time_precision():
